@@ -1,0 +1,16 @@
+credentials:
+  usernames:
+    jherth:
+      email: johann.herth@irsn.com
+      name: Johann Herth
+      password: abcd # To be replaced with hashed password
+    rbriggs:
+      email: rbriggs@gmail.com
+      name: Rebecca Briggs
+      password: def # To be replaced with hashed password
+cookie:
+  expiry_days: 0
+  key: SR_signature # Must be string
+  name: SR_cookie
+preauthorized:
+  emails:
