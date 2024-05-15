@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 from utils.st_filter_dataframe import df_multiselect_filters, df_selectbox_filters
-from utils.plot_functions import dose_scatter_plot, dose_ratio_scatter_plot, dose_ratio_bar_chart
+from utils.plot_functions_streamlit import dose_scatter_plot, dose_ratio_scatter_plot, dose_ratio_bar_chart
 
 # Configuration de la page Streamlit
 st.set_page_config(
