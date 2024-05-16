@@ -19,8 +19,6 @@ st.set_page_config(
     }
 )
 
-st.write("My first Streamlit app")
-
 # Chargement des données avec mise en cache
 @st.cache_data
 def load_data(sheet_name):
@@ -94,7 +92,6 @@ data["Dose (Gy)"] = data["Dose (Gy)"] * dose_multiplier
 colors = ['#FD3216', '#00FE35', '#6A76FC', '#FED4C4', '#FE00CE', '#0DF9FF', '#F6F926', '#FF9616', '#479B55', '#EEA6FB', '#DC587D', '#D626FF', '#6E899C', '#00B5F7', '#B68E00', '#C9FBE5', '#FF0092', '#22FFA7', '#E3EE9E', '#86CE00', '#BC7196', '#7E7DCD', '#FC6955', '#E48F72']
 
 
-st.divider()
 # Sélection des paramètres
 st.header("Parameter selection")
 
@@ -213,13 +210,15 @@ def calculate_significant_discrepancies(input_data, grouping_columns):
 
 st.divider()
 st.header("Error Handling")
-tab4, tab5, tab6 = st.tabs(["❔ Missing values", "❗ High uncertainty (1σ>10%)", "🚨 Discrepancies"])
+tab4, tab5, tab6 = st.tabs(["❔ Missing values", "❗ High uncertainty", "🚨 Discrepancies"])
 
 with tab4:
+    st.write("Missing dose values in the dataset:")
     empty_values_df = data[data.isnull().any(axis=1)]
     st.dataframe(empty_values_df, hide_index = True)
 
 with tab5:
+    st.write("Relative uncertainty (1σ) exceeding 10%:")
     high_uncertainty_df = data[data['1s uncertainty'] > 0.1]
     high_uncertainty_df = high_uncertainty_df.style.format({
     "1s uncertainty": "{:.2%}",  # Format en pourcentage avec 2 décimales

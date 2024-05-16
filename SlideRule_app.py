@@ -25,6 +25,8 @@ st.set_page_config(
     }
 )
 
+st.write("# Welcome to the Slide-Rule app! 👋")
+
 with open('./config.yaml') as file:
     config = yaml.load(file, Loader=SafeLoader)
 
@@ -47,10 +49,4 @@ elif st.session_state["authentication_status"] is False:
 elif st.session_state["authentication_status"] is None:
     st.warning('Please enter your username and password')
 
-st.write("# Welcome to the Slide-Rule app! 👋")
-st.title("Slide Rule")
-st.write(
-    """My first Streamlit app
-    """
-)
 
