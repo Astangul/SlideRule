@@ -1,5 +1,6 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 
 def sort_groups_by_first_numeric_column(grouped_data):
@@ -145,8 +146,6 @@ def dose_ratio_scatter_plot(compare_data, ref_data, colors):
 
     st.plotly_chart(fig2, use_container_width=True)
 
-
-
 def dose_ratio_bar_chart(compare_data, ref_data, colors):
     title = "Dose Ratio"
     
@@ -218,6 +217,190 @@ def dose_ratio_bar_chart(compare_data, ref_data, colors):
 
     st.plotly_chart(fig2, use_container_width=True)
 
+def dose_scatter_plot_2(data, filters, colors):
+    log_x = st.toggle("X-axis log scale", value=True, key="log_x_fig1")
+    log_y = st.toggle("Y-axis log scale", value=True, key="log_y_fig1")
+    fig1 = go.Figure()
+    
+    data['unique_key'] = data.apply(lambda row: '_'.join([str(row[col]) for col in filters.keys()]), axis=1)
+
+    # Group the data by 'unique_key' and sort the groups by the first numeric column
+    grouped_data = list(data.groupby('unique_key'))
+    grouped_data = sort_groups_by_first_numeric_column(grouped_data)
+
+    # Loop through each sorted group
+    for index, (key, group) in enumerate(grouped_data):
+        fig1.add_trace(go.Scatter(x=group["Distance (m)"], 
+                                  y=group["Dose (Gy)"],
+                                  mode='lines+markers', 
+                                  marker_symbol='circle-dot', marker_size=8,
+                                  line=dict(dash='dash', color=colors[index % len(colors)]),
+                                  name=f'{key}',
+                                  error_y=dict(type='data', array=2*group["Absolute Uncertainty"], visible=True)
+                                  ))
+
+    fig1.update_layout(
+        hovermode='x',
+        showlegend=True,
+        xaxis={'showgrid':True},
+        yaxis={'showgrid':True},
+        height=700,
+        legend_title="Click on legends below to hide/show:",
+    )
+    fig1.update_xaxes(minor=dict(ticks="inside", ticklen=6, griddash='dot', showgrid=True))
+    fig1.update_yaxes(minor=dict(ticks="inside", ticklen=6, griddash='dot', showgrid=True))
+
+    if log_x:
+        fig1.update_xaxes(type='log', title="Distance (m) [Log10]")
+    else:
+        fig1.update_xaxes(type='linear', title="Distance (m)")
+    
+    if log_y:
+        fig1.update_yaxes(type='log', title="Dose (Gy) ± 2σ [Log10]", tickformat='.2e')
+    else:
+        fig1.update_yaxes(type='linear', title="Dose (Gy) ± 2σ", tickformat='.2e')
+
+    st.plotly_chart(fig1, use_container_width=True)
+
+def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filters, color, fig, series_number):
+    # Création de clés uniques pour grouper les données
+    compare_data['unique_key'] = compare_data.apply(lambda row: '_'.join([str(row[col]) for col in compare_filters.keys()]), axis=1)
+    ref_data['unique_key'] = ref_data.apply(lambda row: '_'.join([str(row[col]) for col in ref_filters.keys()]), axis=1)
+
+    # Fusion des données et calcul du ratio de dose et de l'incertitude combinée
+    merged_data = compare_data.merge(ref_data, on="Distance (m)", suffixes=('', '_ref'))
+    merged_data['Dose Ratio'] = merged_data['Dose (Gy)'] / merged_data['Dose (Gy)_ref']
+    merged_data['Combined Uncertainty'] = np.sqrt(np.square(merged_data['1s uncertainty']) + np.square(merged_data['1s uncertainty_ref']))
+    merged_data['Absolute Combined Uncertainty'] = merged_data['Combined Uncertainty'] * merged_data['Dose Ratio']
+
+    # Conversion des distances en chaînes pour un axe x catégoriel
+    merged_data['Distance (m)'] = merged_data['Distance (m)'].astype(str)
+
+    # Grouper les données par 'unique_key' et trier
+    grouped_data = list(merged_data.groupby('unique_key'))
+    grouped_data = sort_groups_by_first_numeric_column(grouped_data)
+
+    # Parcourir chaque groupe trié
+    for index, (key, group) in enumerate(grouped_data):
+        rgba_color = hex_to_rgba(color, alpha=0.3)
+
+        legend_group = f"series_{series_number}"  # Groupe de légende unique basé sur le numéro de série
+        series_name = f"Serie {series_number}"  # f"Série {series_number} - {key}"
+
+        upper_bound = group['Dose Ratio'] + group['Absolute Combined Uncertainty']
+        lower_bound = group['Dose Ratio'] - group['Absolute Combined Uncertainty']
+
+        # Tracé de la ligne principale
+        fig.add_trace(go.Scatter(
+            x=group["Distance (m)"],
+            y=group["Dose Ratio"],
+            legendgroup=legend_group,
+            name=series_name,
+            customdata=group['Absolute Combined Uncertainty'],
+            error_y=dict(type='data', array=group['Absolute Combined Uncertainty'], visible=True),  
+            mode='lines+markers',
+            marker_symbol='circle-open-dot',
+            marker_size=8,
+            line=dict(dash='dash', color=color),
+            hovertemplate='%{y:.3f} ± %{customdata:.2e}'
+        ))
+
+        # Ajout des bandes d'erreur
+        fig.add_trace(go.Scatter(
+            x=group["Distance (m)"], y=upper_bound, mode='lines', 
+            line=dict(width=0), hoverinfo='none', showlegend=False, 
+            legendgroup=legend_group, fillcolor=rgba_color))
+        fig.add_trace(go.Scatter(
+            x=group["Distance (m)"], y=lower_bound, mode='lines', 
+            line=dict(width=0), fill='tonexty', fillcolor=rgba_color, 
+            hoverinfo='none', showlegend=False, legendgroup=legend_group))
+
+    # Mise à jour de la configuration du graphique
+    fig.update_layout(
+        hovermode='x', 
+        height=700, 
+        showlegend=True, 
+        legend_title="Click on legends below to hide/show:", 
+        xaxis={'showgrid': True}, 
+        yaxis={'showgrid': True, 
+               'title': "Dose Ratio",
+               'tickmode': 'auto',
+               'minor': {
+                   'ticks': "inside",
+                   'ticklen': 6,
+                   'griddash': 'dot',
+                   'showgrid': True
+               }
+        })
+
+def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters, color, fig2, series_number):
+    title = "Dose Ratio"
+
+    # Création de clés uniques pour identifier chaque ligne de manière unique
+    compare_data['unique_key'] = compare_data.apply(lambda row: '_'.join([str(row[col]) for col in compare_filters.keys()]), axis=1)
+    ref_data['unique_key'] = ref_data.apply(lambda row: '_'.join([str(row[col]) for col in ref_filters.keys()]), axis=1)
+
+    # Fusion des données et calcul du ratio de dose et de l'incertitude combinée
+    merged_data = compare_data.merge(ref_data, on="Distance (m)", suffixes=('', '_ref'))
+    merged_data['Dose Ratio'] = merged_data['Dose (Gy)'] / merged_data['Dose (Gy)_ref']
+    merged_data['Combined Uncertainty'] = np.sqrt(np.square(merged_data['1s uncertainty']) + np.square(merged_data['1s uncertainty_ref']))
+    merged_data['Absolute Combined Uncertainty'] = merged_data['Combined Uncertainty'] * merged_data['Dose Ratio']
+
+    # Conversion des distances pour l'axe des x catégoriel
+    merged_data['Distance (m)'] = merged_data['Distance (m)'].astype(str)
+
+    # Regroupement des données par 'unique_key'
+    grouped_data = merged_data.groupby('unique_key')
+
+    # Boucle à travers chaque groupe trié
+    for key, group in grouped_data:
+        rgba_color = hex_to_rgba(color, alpha=0.75)  # Utilisation d'une certaine transparence pour les couleurs des barres
+        complementary_color = hex_to_complementary_rgba(color)
+        legend_group = f"series_{series_number}"  # Groupe de légende unique pour chaque série
+        series_name = f"Serie {series_number}" #  f"Série {series_number} - {key}"  
+
+        hovertemplate = '%{y:.3f} ± %{customdata:.2e}'
+
+        # Tracé du graphique à barres
+        fig2.add_trace(go.Bar(
+            x=group["Distance (m)"],
+            y=group["Dose Ratio"],
+            customdata=group['Absolute Combined Uncertainty'],
+            error_y=dict(
+                type='data', 
+                array=group['Absolute Combined Uncertainty'], 
+                visible=True,
+                thickness=2,
+                color=complementary_color
+            ),
+            legendgroup=legend_group,
+            name=series_name,
+            marker=dict(color=rgba_color, line=dict(color=color, width=2)),
+            hovertemplate=hovertemplate
+        ))
+
+    # Mise à jour de la mise en page
+    fig2.update_layout(
+        hovermode='x', 
+        height=700, 
+        showlegend=True, 
+        legend_title="Click on legends below to hide/show:", 
+        xaxis=dict(
+            title="Distance (m)",
+            type='category'
+        ),
+        yaxis=dict(
+            title=title,
+            tickmode='auto',
+            minor=dict(
+                ticks="inside",
+                ticklen=6,
+                griddash='dot',
+                showgrid=True
+            )
+        ),
+        barmode='group'
+    )
 
 def hex_to_rgba(hex_color, alpha=1.0):
     hex_color = hex_color.lstrip('#')
