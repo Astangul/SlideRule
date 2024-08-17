@@ -1,7 +1,12 @@
+import colorsys
 import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+
+from utils.utils_func_st import generate_filter_combinations, generate_series_name
+# ___________________________________________________________
+
 
 def sort_groups_by_first_numeric_column(grouped_data):
     if not grouped_data:
@@ -17,6 +22,48 @@ def sort_groups_by_first_numeric_column(grouped_data):
         grouped_data.sort(key=lambda x: x[1][first_numeric_column].iloc[0])
     return grouped_data
 
+
+#  ______________________________________ 
+def hex_to_rgba(hex_color, alpha=1.0):
+    hex_color = hex_color.lstrip('#')
+    rgb = [int(hex_color[i:i+2], 16) for i in (0, 2, 4)]
+    return f'rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {alpha})'
+
+def hex_to_complementary_rgba(hex_color, alpha=1.0):
+    hex_color = hex_color.lstrip('#')
+    rgb = [int(hex_color[i:i+2], 16) for i in (0, 2, 4)]
+    complementary_rgb = [255 - x for x in rgb]
+    return f'rgba({complementary_rgb[0]}, {complementary_rgb[1]}, {complementary_rgb[2]}, {alpha})'
+
+def generate_analogous_colors(base_color, num_colors=3, spread=0.1):
+    """
+    Generate a list of analogous colors based on the base color.
+    :param base_color: Hex color string (e.g., "#ff5733")
+    :param num_colors: Number of analogous colors to generate.
+    :param spread: How much to spread the analogous colors around the base color's hue.
+    :return: List of hex color strings.
+    """
+    if num_colors == 1:
+        return [base_color]
+
+    r = int(base_color[1:3], 16)
+    g = int(base_color[3:5], 16)
+    b = int(base_color[5:7], 16)
+
+    # Convert RGB to HLS
+    h, l, s = colorsys.rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
+    
+    # Generate colors by adjusting the hue within the spread range
+    analogous_colors = []
+    for i in range(num_colors):
+        hue_adjustment = spread * (i - (num_colors // 2)) / (num_colors - 1)
+        new_h = (h + hue_adjustment) % 1.0
+        r, g, b = colorsys.hls_to_rgb(new_h, l, s)
+        analogous_colors.append('#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255)))
+
+    return analogous_colors
+
+# ________________________________________________________________________________
 def dose_scatter_plot(ref_data, ref_label, compare_data, colors):
     log_x = st.toggle("X-axis log scale", value=True, key="log_x_fig1")
     log_y = st.toggle("Y-axis log scale", value=True, key="log_y_fig1")
@@ -263,8 +310,15 @@ def dose_scatter_plot_2(data, filters, colors):
     st.plotly_chart(fig1, use_container_width=True)
 
 def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filters, color, fig, series_number):
+    compare_filter_combinations = generate_filter_combinations(compare_filters)
+    
+    # Génération de couleurs analogues
+    num_cases = len(compare_filter_combinations)
+    analogous_colors = generate_analogous_colors(color, num_colors=num_cases, spread=0.3)
+    
     # Création de clés uniques pour grouper les données
-    compare_data['unique_key'] = compare_data.apply(lambda row: '_'.join([str(row[col]) for col in compare_filters.keys()]), axis=1)
+    compare_data = compare_data.copy()
+    compare_data.loc[:, 'unique_key'] = compare_data.apply(lambda row: '_'.join([str(row[col]) for col in compare_filters.keys()]), axis=1)
     ref_data['unique_key'] = ref_data.apply(lambda row: '_'.join([str(row[col]) for col in ref_filters.keys()]), axis=1)
 
     # Fusion des données et calcul du ratio de dose et de l'incertitude combinée
@@ -282,14 +336,16 @@ def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filte
 
     # Parcourir chaque groupe trié
     for index, (key, group) in enumerate(grouped_data):
-        rgba_color = hex_to_rgba(color, alpha=0.3)
-
+        series_name = generate_series_name(series_number, compare_filter_combinations[index], ref_filters)
+        # Utiliser une couleur analogue pour chaque cas
+        adjusted_color = analogous_colors[index]  
+        rgba_color = hex_to_rgba(adjusted_color, alpha=0.3)
         legend_group = f"series_{series_number}"  # Groupe de légende unique basé sur le numéro de série
-        series_name = f"Serie {series_number}"  # f"Série {series_number} - {key}"
+        series_name = f"{series_name}"
 
         upper_bound = group['Dose Ratio'] + group['Absolute Combined Uncertainty']
         lower_bound = group['Dose Ratio'] - group['Absolute Combined Uncertainty']
-
+        
         # Tracé de la ligne principale
         fig.add_trace(go.Scatter(
             x=group["Distance (m)"],
@@ -301,7 +357,7 @@ def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filte
             mode='lines+markers',
             marker_symbol='circle-open-dot',
             marker_size=8,
-            line=dict(dash='dash', color=color),
+            line=dict(dash='dash', color=adjusted_color),
             hovertemplate='%{y:.3f} ± %{customdata:.2e}'
         ))
 
@@ -334,7 +390,13 @@ def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filte
         })
 
 def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters, color, fig2, series_number):
+    compare_filter_combinations = generate_filter_combinations(compare_filters)
+
     title = "Dose Ratio"
+
+    # Génération de couleurs analogues
+    num_cases = len(compare_filter_combinations)
+    analogous_colors = generate_analogous_colors(color, num_colors=num_cases, spread=0.2)
 
     # Création de clés uniques pour identifier chaque ligne de manière unique
     compare_data['unique_key'] = compare_data.apply(lambda row: '_'.join([str(row[col]) for col in compare_filters.keys()]), axis=1)
@@ -353,11 +415,14 @@ def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters,
     grouped_data = merged_data.groupby('unique_key')
 
     # Boucle à travers chaque groupe trié
-    for key, group in grouped_data:
-        rgba_color = hex_to_rgba(color, alpha=0.75)  # Utilisation d'une certaine transparence pour les couleurs des barres
-        complementary_color = hex_to_complementary_rgba(color)
+    for index, (key, group) in enumerate(grouped_data):
+        series_name = generate_series_name(series_number, compare_filter_combinations[index], ref_filters)
+        # Utilisation d'une couleur analogue pour chaque cas
+        adjusted_color = analogous_colors[index]  
+        rgba_color = hex_to_rgba(adjusted_color, alpha=0.75)  # Utilisation d'une certaine transparence pour les couleurs des barres
+        complementary_color = hex_to_complementary_rgba(adjusted_color)
         legend_group = f"series_{series_number}"  # Groupe de légende unique pour chaque série
-        series_name = f"Serie {series_number}" #  f"Série {series_number} - {key}"  
+        series_name = f"{series_name}"  
 
         hovertemplate = '%{y:.3f} ± %{customdata:.2e}'
 
@@ -375,7 +440,7 @@ def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters,
             ),
             legendgroup=legend_group,
             name=series_name,
-            marker=dict(color=rgba_color, line=dict(color=color, width=2)),
+            marker=dict(color=rgba_color, line=dict(color=adjusted_color, width=2)),
             hovertemplate=hovertemplate
         ))
 
@@ -401,14 +466,3 @@ def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters,
         ),
         barmode='group'
     )
-
-def hex_to_rgba(hex_color, alpha=1.0):
-    hex_color = hex_color.lstrip('#')
-    rgb = [int(hex_color[i:i+2], 16) for i in (0, 2, 4)]
-    return f'rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {alpha})'
-
-def hex_to_complementary_rgba(hex_color, alpha=1.0):
-    hex_color = hex_color.lstrip('#')
-    rgb = [int(hex_color[i:i+2], 16) for i in (0, 2, 4)]
-    complementary_rgb = [255 - x for x in rgb]
-    return f'rgba({complementary_rgb[0]}, {complementary_rgb[1]}, {complementary_rgb[2]}, {alpha})'

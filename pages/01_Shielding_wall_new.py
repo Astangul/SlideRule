@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-from utils.st_filter_dataframe import df_multiselect_filters, df_selectbox_filters
-from utils.plot_functions_streamlit import dose_scatter_plot_2, dose_ratio_scatter_plot_2, dose_ratio_bar_chart_2
+from utils.utils_func_st import df_multiselect_filters, df_selectbox_filters, normalize_filters, generate_filter_combinations, load_data_with_filters
+from utils.plot_func_st import dose_scatter_plot_2, dose_ratio_scatter_plot_2, dose_ratio_bar_chart_2, generate_analogous_colors
 
 # Configuration de la page Streamlit
 st.set_page_config(
@@ -113,7 +113,7 @@ if 'num_series' not in st.session_state:
 
 with tab2:
     with st.container():
-        btn_col = st.columns([1,1,25]) # st.columns([1, 1], gap="small")
+        btn_col = st.columns([1, 1, 25])
         with btn_col[0]:
             if st.button("➕", key="btn_add"):
                 st.session_state['num_series'] += 1
@@ -121,42 +121,63 @@ with tab2:
             if st.button("➖", key="btn_remove") and st.session_state['num_series'] > 1:
                 st.session_state['num_series'] -= 1
     
-    series_data = []
-    global_fig = go.Figure()
-
+    global_fig = go.Figure()  # Créer une seule figure pour tout le traçage
+    
+    plot_type = st.radio("Select the plot type:", ["Scatter Plot", "Bar Chart"], key="global_plot_type")
+    
     for i in range(1, st.session_state['num_series'] + 1):
         with st.expander(f"Serie {i} (click to expand/collapse)", expanded=False):
             col3, col4 = st.columns(2)
             with col3:
-                compare_data, compare_filters = df_selectbox_filters(data, default_columns=['Fissile', 'Case', 'Code', 'Particle', 'Screen', 'Thickness (cm)'], key=f"compare_series_{i}")
+                st.caption("Comparison case(s)")
+                compare_data, compare_filters = df_multiselect_filters(
+                    data, default_columns=['Fissile', 'Case', 'Code', 'Particle', 'Screen', 'Thickness (cm)'], key=f"compare_series_{i}")   
             with col4:
-                ref_data, ref_filters = df_selectbox_filters(data, default_columns=['Fissile', 'Case', 'Code', 'Particle', 'Screen', 'Thickness (cm)'], key=f"reference_case_{i}")
+                st.caption("Reference case")
+                ref_data, ref_filters = df_selectbox_filters(
+                    data, default_columns=['Fissile', 'Case', 'Code', 'Particle', 'Screen', 'Thickness (cm)'], key=f"reference_case_{i}")
+            
+            # Normaliser ref_filters pour qu'il soit comparable
+            normalized_ref_filters = normalize_filters(ref_filters)
+            
+            # Générer toutes les combinaisons possibles de compare_filters
+            all_compare_combinations = generate_filter_combinations(compare_filters)
 
-            if compare_filters != ref_filters:
-                series_data.append((compare_data, compare_filters, ref_data, ref_filters))
+            # Filtrer les combinaisons identiques à ref_filters
+            filtered_combinations = [comb for comb in all_compare_combinations if comb != normalized_ref_filters]
+
+            if filtered_combinations:
+                # Définir la couleur de base pour chaque série
+                base_color = colors[i % len(colors) - 1]
+                # Générer les couleurs analogues pour les différents cas d'une même série
+                analogous_colors = generate_analogous_colors(base_color, num_colors=len(filtered_combinations), spread=0.3)
+
+                for index, valid_comb in enumerate(filtered_combinations):
+                    # Recharger les données avec les filtres validés
+                    filtered_compare_data = load_data_with_filters(data, valid_comb)
+                    
+                    # Couleur analogue pour chaque cas
+                    adjusted_color = analogous_colors[index]
+                    
+                    # Traiter tous les cas comme une seule série
+                    if plot_type == "Scatter Plot":
+                        dose_ratio_scatter_plot_2(filtered_compare_data, valid_comb, ref_data, ref_filters, adjusted_color, global_fig, i)
+                    elif plot_type == "Bar Chart":
+                        dose_ratio_bar_chart_2(filtered_compare_data, valid_comb, ref_data, ref_filters, adjusted_color, global_fig, i)
             else:
                 st.write(f"Comparison and reference cases for Series {i} are identical. No plot will be generated.")
-
-    plot_type = st.radio("Select the plot type:", ["Scatter Plot", "Bar Chart"], key="global_plot_type")
-
-    for index, (compare_data, compare_filters, ref_data, ref_filters) in enumerate(series_data, start=1):
-        color = colors[index % len(colors)- 1] 
-        if plot_type == "Scatter Plot":
-            # dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filters, color, global_fig)
-            dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filters, color, global_fig, index)
-        elif plot_type == "Bar Chart":
-            # dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters, color, global_fig)
-            dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters, color, global_fig, index)
-    # Toggle for logarithmic scale on X-axis
+    
+    # Toggle pour l'échelle logarithmique sur l'axe X
     if plot_type == "Scatter Plot":
         log_x_fig = st.toggle("X-axis log scale", value=True, key="log_x_global_fig")
-        # Set X-axis scale
+        # Définir l'échelle de l'axe X
         if log_x_fig:
             global_fig.update_xaxes(type='log', title="Distance (m) [Log10]")
         else:
             global_fig.update_xaxes(type='linear', title="Distance (m)")
+    
+    # Afficher la figure globale avec toutes les séries dans un seul graphique
     st.plotly_chart(global_fig, use_container_width=True)
-
 
 with tab3:
     @st.cache_data

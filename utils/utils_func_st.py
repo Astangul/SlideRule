@@ -2,8 +2,51 @@
 import pandas as pd
 import streamlit as st
 from pandas.api.types import is_categorical_dtype, is_numeric_dtype, is_datetime64_any_dtype, is_object_dtype
+import itertools
+
+# __________________________________
+def normalize_filters(filters):
+    """
+    Normalize filters by converting all single-element lists to their single value.
+    """
+    normalized = {}
+    for key, value in filters.items():
+        if isinstance(value, list) and len(value) == 1:
+            normalized[key] = value[0]  # Convert single-element lists to the single value
+        else:
+            normalized[key] = value
+    return normalized
+
+def generate_filter_combinations(filters):
+    """
+    Generate all possible filter combinations.
+    Args:
+        filters (dict): The filters to decompose.
+    Returns:
+        List[dict]: A list of dictionaries, each representing a unique filter combination.
+    """
+    keys, values = zip(*filters.items())
+    value_combinations = itertools.product(*[v if isinstance(v, list) else [v] for v in values])
+    return [dict(zip(keys, combination)) for combination in value_combinations]
 
 
+def load_data_with_filters(data, filters):
+    """
+    Load data based on the given filters.
+    """
+    query = " and ".join([f"`{key}` == {repr(value)}" for key, value in filters.items()])
+    return data.query(query)
+
+def generate_series_name(series_number, compare_filter_single, ref_filters):
+    differences = []
+    for key in compare_filter_single.keys():
+        compare_value = compare_filter_single[key]
+        ref_value = ref_filters[key][0]
+        if compare_value != ref_value:
+            differences.append(f"'{key}': [{compare_value} vs. {ref_value}]")
+    differences_str = ', '.join(differences)
+    return f"Serie {series_number} - {differences_str}" if differences else f"Serie {series_number}"
+# __________________________________
 def df_multiselect_filters(df: pd.DataFrame, default_columns: list = None, key: str = "default") -> (pd.DataFrame, dict):
     """
     Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display
@@ -75,7 +118,6 @@ def df_multiselect_filters(df: pd.DataFrame, default_columns: list = None, key: 
                     df = df[df[column].str.contains(user_text_input)]
 
     return df, filters
-
 
 def df_selectbox_filters(df: pd.DataFrame, default_columns: list = None, key: str = "default") -> (pd.DataFrame, dict):
     """
