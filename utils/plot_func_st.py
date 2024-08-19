@@ -401,7 +401,6 @@ def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters,
     # Création de clés uniques pour identifier chaque ligne de manière unique
     compare_data = compare_data.copy()
     compare_data.loc[:, 'unique_key'] = compare_data.apply(lambda row: '_'.join([str(row[col]) for col in compare_filters.keys()]), axis=1)
-    #compare_data['unique_key'] = compare_data.apply(lambda row: '_'.join([str(row[col]) for col in compare_filters.keys()]), axis=1)
     ref_data['unique_key'] = ref_data.apply(lambda row: '_'.join([str(row[col]) for col in ref_filters.keys()]), axis=1)
 
     # Fusion des données et calcul du ratio de dose et de l'incertitude combinée
