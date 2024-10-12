@@ -292,7 +292,14 @@ def dose_scatter_plot_2(data, filters, colors):
         xaxis={'showgrid':True},
         yaxis={'showgrid':True},
         height=700,
-        legend_title="Click on legends below to hide/show:",
+        # legend_title="Click on legends below to hide/show:",
+        legend=dict(
+        title="Click on legends below to hide/show:",
+        orientation="h",  # horizontal layout
+        yanchor="bottom",  # anchor the legend to the bottom of its box
+        y=1.02,  # position it slightly above the top of the plot area
+        xanchor="center",  # center the legend horizontally
+        x=0.5)  # center the legend
     )
     fig1.update_xaxes(minor=dict(ticks="inside", ticklen=6, griddash='dot', showgrid=True))
     fig1.update_yaxes(minor=dict(ticks="inside", ticklen=6, griddash='dot', showgrid=True))

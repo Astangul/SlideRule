@@ -13,11 +13,61 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://www.extremelycoolapp.com/help',
-        'Report a bug': "https://www.extremelycoolapp.com/bug",
-        'About': "# This is a header. This is an *extremely* cool app!"
+        'Get Help': None,
+        'Report a bug': "https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues",
+        'About': "https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule"
     }
 )
+
+# ________________
+ms = st.session_state
+if "themes" not in ms: 
+    ms.themes = {"current_theme": "light",
+                    "refreshed": True,
+                    
+                    "light": {"theme.base": "dark", 
+                              "theme.backgroundColor": "#0E1117", 
+                              "theme.primaryColor": "#ff4b4b", #"#c98bdb"
+                              "theme.secondaryBackgroundColor": "#262730", #"#5591f5",
+                              "theme.textColor": "white",
+                              "button_face": "🌜"},
+
+                    "dark":  {"theme.base": "light",
+                              "theme.backgroundColor": "white",
+                              "theme.primaryColor": "#6c1d82", #"#5591f5",
+                              "theme.secondaryBackgroundColor": "#F0F2F6", #"#82E1D7",
+                              "theme.textColor": "#0a1464",
+                              "button_face": "🌞"},
+                    }
+  
+
+def ChangeTheme():
+  previous_theme = ms.themes["current_theme"]
+  tdict = ms.themes["light"] if ms.themes["current_theme"] == "light" else ms.themes["dark"]
+  for vkey, vval in tdict.items(): 
+    if vkey.startswith("theme"): st._config.set_option(vkey, vval)
+
+  ms.themes["refreshed"] = False
+  if previous_theme == "dark": ms.themes["current_theme"] = "light"
+  elif previous_theme == "light": ms.themes["current_theme"] = "dark"
+
+
+btn_face = ms.themes["light"]["button_face"] if ms.themes["current_theme"] == "light" else ms.themes["dark"]["button_face"]
+# st.sidebar.button(btn_face, on_click=ChangeTheme)
+
+if ms.themes["refreshed"] == False:
+  ms.themes["refreshed"] = True
+  st.rerun()
+
+# with st.sidebar:
+#     st.divider()
+# _______________________
+
+
+sidebar_logo_path = "./icons/Slide-Rule_orange.png"
+main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
+st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
+# st.logo(sidebar_logo, size="large", link=None, icon_image=None)
 
 # Chargement des données avec mise en cache
 @st.cache_data
@@ -67,17 +117,26 @@ selected_value = st.sidebar.select_slider(
 # Convertir la valeur sélectionnée en float pour les calculs
 fissions_number_slider = float(selected_value)
 
+# **Calculer dynamiquement le pas**
+current_value = st.session_state.get('fission_input', 1e17)
+exponent = np.floor(np.log10(current_value))
+step = (10 ** exponent) * 0.1
+
 # Créer un number_input pour permettre à l'utilisateur d'entrer manuellement la valeur
 fissions_number_input = st.sidebar.number_input(
     "OR enter the number of fissions",
     min_value=1.0e+13,
     max_value=1.0e+21,
     value=fissions_number_slider,
-    step=None,
+    step=step,
     format="%.1e",
     key="fission_input",
     on_change=update_fission_slider
 )
+
+st.sidebar.divider()
+st.sidebar.button(btn_face, on_click=ChangeTheme)
+
 
 # Calcul du facteur de multiplication des doses
 dose_multiplier = fissions_number_input / 1e17
@@ -103,7 +162,7 @@ with tab1:
         "Dose (Gy)": "{:.2e}",       
         "Absolute Uncertainty": "{:.2e}"  
         })
-    st.write(f"Estimated prompt dose based on total fissions: {fissions_number_input:.2e}")
+    st.write(f"Estimated prompt dose based on total fissions: {fissions_number_input:.1e}")
     dose_scatter_plot_2(visu_data, visu_filters, colors)
     st.dataframe(formatted_data, hide_index=True)
 
@@ -208,30 +267,26 @@ with tab3:
                     dose_code2 = local_group[local_group['Code'] == code2]['Dose (Gy)'].iloc[0]
                     ecart_relatif = abs(dose_code1 - dose_code2) / max(dose_code1, dose_code2)
 
-                    if ecart_relatif > 0.1:
-                        # Construction du dictionnaire pour le nouveau DataFrame
-                        new_row_data = {
-                            'Code1': code1,
-                            'Code2': code2,
-                            'Dose_Code1': f"{dose_code1:.2e}",
-                            'Dose_Code2': f"{dose_code2:.2e}",
-                            'Relative_Difference': f"{ecart_relatif:.2%}"
-                        }
-
-                        # Ajouter les détails du groupe en premier dans le dictionnaire
-                        group_data = {}
-                        if isinstance(name, tuple):  # Si le groupe est par plusieurs colonnes
-                            for col, val in zip(grouping_columns, name):
+                    # if ecart_relatif > 0.1:
+                    # # Construction du dictionnaire pour le nouveau DataFrame
+                    new_row_data = {
+                        'Code1': code1,
+                        'Code2': code2,
+                        'Dose_Code1': f"{dose_code1:.2e}",
+                        'Dose_Code2': f"{dose_code2:.2e}",
+                        'Relative_Difference': f"{ecart_relatif:.2%}"
+                    }
+                    # Ajouter les détails du groupe en premier dans le dictionnaire
+                    group_data = {}
+                    if isinstance(name, tuple):  # Si le groupe est par plusieurs colonnes
+                        for col, val in zip(grouping_columns, name):
                                 group_data[col] = val
-                        else:  # Si le groupe est par une seule colonne
-                            group_data[grouping_columns[0]] = name
-
-                        # Fusion des dictionnaires de groupes et de résultats
-                        full_row_data = {**group_data, **new_row_data}
-
-                        # Ajout de la ligne à la liste de données
-                        significant_differences.append(full_row_data)
-
+                    else:  # Si le groupe est par une seule colonne
+                        group_data[grouping_columns[0]] = name
+                    # Fusion des dictionnaires de groupes et de résultats
+                    full_row_data = {**group_data, **new_row_data}
+                    # Ajout de la ligne à la liste de données
+                    significant_differences.append(full_row_data)
         # Création du DataFrame final à partir de la liste de dictionnaires
         return pd.DataFrame(significant_differences)
 
@@ -243,28 +298,44 @@ with tab3:
         st.dataframe(empty_values_df, hide_index = True)
 
     with tab5:
-        st.write("Relative uncertainty (1σ) exceeding 10%:")
-        high_uncertainty_df = data[data['1s uncertainty'] > 0.1]
+        # Ajout du range slider pour définir la plage d'incertitude
+        uncertainty_range = st.slider(
+        "Relative uncertainty (1σ) range [%]:", 
+        min_value=0.0, 
+        max_value=100.0, 
+        value=(10.0, 100.0),  # Valeurs par défaut
+        step=1.0
+        )
+        high_uncertainty_df = data[
+            (data['1s uncertainty'] >= (uncertainty_range[0] / 100)) & 
+            (data['1s uncertainty'] <= (uncertainty_range[1] / 100))
+        ]
         high_uncertainty_df = high_uncertainty_df.style.format({
-        "1s uncertainty": "{:.2%}",  # Format en pourcentage avec 2 décimales
-        "Dose (Gy)": "{:.2e}",       # Format scientifique avec 2 décimales
-        "Absolute Uncertainty": "{:.2e}"  # Format scientifique avec 2 décimales
-    })
+            "1s uncertainty": "{:.2%}",  # Format en pourcentage avec 2 décimales
+            "Dose (Gy)": "{:.2e}",       # Format scientifique avec 2 décimales
+            "Absolute Uncertainty": "{:.2e}"  # Format scientifique avec 2 décimales
+        })
         st.dataframe(high_uncertainty_df, hide_index = True)
 
-
-    # Supposons que 'data' est déjà chargé
-    codes_uniques = data['Code'].unique()
-
-    # Grouper les données par les paramètres communs pour la comparaison
-    columns_to_group_by = ['Fissile', 'Case', 'Library', 'Flux-to-dose conversion factor', 'Screen', 'Thickness (cm)', 'Particle', 'Distance (m)']
-
-    # Suppose que 'data' et 'columns_to_group_by' sont déjà définis
-    ecarts_significatifs = calculate_significant_discrepancies(data, columns_to_group_by)
-
     with tab6:
-        if not ecarts_significatifs.empty:
-            st.write("Relative difference exceeding 10%:")
-            st.dataframe(ecarts_significatifs, hide_index=True)
+        # Grouper les données par les paramètres communs pour la comparaison
+        columns_to_group_by = ['Fissile', 'Case', 'Library', 'Flux-to-dose conversion factor', 'Screen', 'Thickness (cm)', 'Particle', 'Distance (m)']
+
+        # Suppose que 'data' et 'columns_to_group_by' sont déjà définis
+        ecarts_significatifs = calculate_significant_discrepancies(data, columns_to_group_by)
+        
+        discrepancy_range = st.slider(
+            "Relative difference range [%]:", 
+            min_value=0.0, 
+            max_value=100.0, 
+            value=(10.0, 100.0),  
+            step=1.0)
+        ecarts_significatifs_filtered = ecarts_significatifs[
+            (ecarts_significatifs['Relative_Difference'].str.rstrip('%').astype(float) >= discrepancy_range[0]) & 
+            (ecarts_significatifs['Relative_Difference'].str.rstrip('%').astype(float) <= discrepancy_range[1])
+        ]
+
+        if not ecarts_significatifs_filtered.empty:
+            st.dataframe(ecarts_significatifs_filtered, hide_index=True)
         else:
-            st.write("No significant discrepancies found between codes.")
+            st.write("No significant discrepancies found within the selected range.")
