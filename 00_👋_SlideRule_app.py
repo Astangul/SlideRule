@@ -4,53 +4,53 @@ import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
 
-# import pandas as pd
-
-# from pandas.api.types import (
-#     is_categorical_dtype,
-#     is_datetime64_any_dtype,
-#     is_numeric_dtype,
-#     is_object_dtype,
-# )
-
+# ______________________________________________________________________________________________________________________
+# Configuration de la page Streamlit
 st.set_page_config(
     page_title="Slide-Rule",
     page_icon="📏",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://www.extremelycoolapp.com/help',
-        'Report a bug': "https://www.extremelycoolapp.com/bug",
-        'About': "# This is a header. This is an *extremely* cool app!"
+        'Get Help': None,
+        'Report a bug': "https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues",
+        'About': "https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule"
     }
 )
+sidebar_logo_path = "./icons/Slide-Rule_orange.png"
+main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
+st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
 
+# Ajouter l'image dans la sidebar
+# image_path = "./icons/Slide-Rule_orange.png"
+# st.sidebar.image(image_path, use_column_width=True)
+# ______________________________________________________________________________________________________________________
 
-st.Page(page="./pages/.py",  icon=":material/home:")
+st.write("# Welcome to the Slide-Rule app!")
 
-st.write("# Welcome to the Slide-Rule app! 👋")
+# ______________________________________________________________________________________________________________________
+# Configuration de l'authentification
+# with open('./config.yaml') as file:
+#     config = yaml.load(file, Loader=SafeLoader)
 
-with open('./config.yaml') as file:
-    config = yaml.load(file, Loader=SafeLoader)
+# authenticator = stauth.Authenticate(
+#     config['credentials'],
+#     config['cookie']['name'],
+#     config['cookie']['key'],
+#     config['cookie']['expiry_days'],
+#     config['preauthorized']
+# )
 
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days'],
-    config['preauthorized']
-)
+# authenticator.login()
 
-authenticator.login()
-
-if st.session_state["authentication_status"]:
-    authenticator.logout()
-    st.write(f'Welcome *{st.session_state["name"]}*')
-    st.title('Some content')
-elif st.session_state["authentication_status"] is False:
-    st.error('Username/password is incorrect')
-elif st.session_state["authentication_status"] is None:
-    st.warning('Please enter your username and password')
+# if st.session_state["authentication_status"]:
+#     authenticator.logout()
+#     st.write(f'Welcome *{st.session_state["name"]}*')
+#     st.title('Some content')
+# elif st.session_state["authentication_status"] is False:
+#     st.error('Username/password is incorrect')
+# elif st.session_state["authentication_status"] is None:
+#     st.warning('Please enter your username and password')
 
 
 # ________________
@@ -93,3 +93,6 @@ if ms.themes["refreshed"] == False:
 st.divider()
 st.button(btn_face, on_click=ChangeTheme)
 # _______________________
+st.markdown("[NCSP Slide-Rule project](https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule)")
+st.markdown("[Need a feature, report a bug](https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues)")
+

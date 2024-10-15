@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from utils.utils_func_st import df_multiselect_filters, df_selectbox_filters, normalize_filters, generate_filter_combinations, load_data_with_filters
 from utils.plot_func_st import dose_scatter_plot_2, dose_ratio_scatter_plot_2, dose_ratio_bar_chart_2, generate_analogous_colors
 
+# ______________________________________________________________________________________________________________________
 # Configuration de la page Streamlit
 st.set_page_config(
     page_title="Slide-Rule",
@@ -18,56 +19,10 @@ st.set_page_config(
         'About': "https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule"
     }
 )
-
-# ________________
-ms = st.session_state
-if "themes" not in ms: 
-    ms.themes = {"current_theme": "light",
-                    "refreshed": True,
-                    
-                    "light": {"theme.base": "dark", 
-                              "theme.backgroundColor": "#0E1117", 
-                              "theme.primaryColor": "#ff4b4b", #"#c98bdb"
-                              "theme.secondaryBackgroundColor": "#262730", #"#5591f5",
-                              "theme.textColor": "white",
-                              "button_face": "🌜"},
-
-                    "dark":  {"theme.base": "light",
-                              "theme.backgroundColor": "white",
-                              "theme.primaryColor": "#6c1d82", #"#5591f5",
-                              "theme.secondaryBackgroundColor": "#F0F2F6", #"#82E1D7",
-                              "theme.textColor": "#0a1464",
-                              "button_face": "🌞"},
-                    }
-  
-
-def ChangeTheme():
-  previous_theme = ms.themes["current_theme"]
-  tdict = ms.themes["light"] if ms.themes["current_theme"] == "light" else ms.themes["dark"]
-  for vkey, vval in tdict.items(): 
-    if vkey.startswith("theme"): st._config.set_option(vkey, vval)
-
-  ms.themes["refreshed"] = False
-  if previous_theme == "dark": ms.themes["current_theme"] = "light"
-  elif previous_theme == "light": ms.themes["current_theme"] = "dark"
-
-
-btn_face = ms.themes["light"]["button_face"] if ms.themes["current_theme"] == "light" else ms.themes["dark"]["button_face"]
-# st.sidebar.button(btn_face, on_click=ChangeTheme)
-
-if ms.themes["refreshed"] == False:
-  ms.themes["refreshed"] = True
-  st.rerun()
-
-# with st.sidebar:
-#     st.divider()
-# _______________________
-
-
 sidebar_logo_path = "./icons/Slide-Rule_orange.png"
 main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
 st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
-# st.logo(sidebar_logo, size="large", link=None, icon_image=None)
+# ______________________________________________________________________________________________________________________
 
 # Chargement des données avec mise en cache
 @st.cache_data
@@ -133,10 +88,6 @@ fissions_number_input = st.sidebar.number_input(
     key="fission_input",
     on_change=update_fission_slider
 )
-
-st.sidebar.divider()
-st.sidebar.button(btn_face, on_click=ChangeTheme)
-
 
 # Calcul du facteur de multiplication des doses
 dose_multiplier = fissions_number_input / 1e17
