@@ -47,15 +47,124 @@ def generate_series_name(series_number, compare_filter_single, ref_filters):
     differences_str = ', '.join(differences)
     return f"Serie {series_number} - {differences_str}" if differences else f"Serie {series_number}"
 # __________________________________
-def df_multiselect_filters(df: pd.DataFrame, default_columns: list = None, key: str = "default") -> (pd.DataFrame, dict):
+# def df_multiselect_filters(
+#     df: pd.DataFrame,
+#     default_columns: list = None,
+#     key: str = "default",
+#     default_values: dict = None  # Dictionnaire pour les valeurs par défaut
+# ) -> (pd.DataFrame, dict):
+#     """
+#     Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display,
+#     default values for specific columns, and a unique key for widget differentiation.
+#     By default, selects only the first unique value for each column for categorical data.
+
+#     Args:
+#         df (pd.DataFrame): Original dataframe
+#         default_columns (list, optional): List of column names to display by default.
+#         key (str, optional): Base key for generating unique widget keys.
+#         default_values (dict, optional): Dictionary of default filter values for specific columns.
+
+#     Returns:
+#         pd.DataFrame: Filtered dataframe
+#         dict: Dictionary of applied filters
+#     """
+#     df = df.copy()
+#     filters = {}
+#     default_values = default_values or {}  # Initialise un dictionnaire vide si non fourni
+
+#     with st.container():
+#         if default_columns is None:
+#             default_columns = list(df.columns)
+
+#         to_filter_columns = st.multiselect(
+#             "Filter dataframe on",
+#             df.columns,
+#             default=default_columns,
+#             key=f"filter_columns_{key}"
+#         )
+        
+#         for column in to_filter_columns:
+#             left, right = st.columns((1, 20))
+#             left.write("↳")
+#             unique_key = f"{column}_{key}"  # Clé unique pour chaque widget
+#             column_defaults = default_values.get(column, None)  # Récupère les valeurs par défaut pour cette colonne
+
+#             if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
+#                 options = df[column].unique().tolist()
+#                 # Filtrer les valeurs par défaut pour ne conserver que celles valides
+#                 valid_defaults = (
+#                     [val for val in column_defaults if val in options]
+#                     if column_defaults else [options[0]] if options else []
+#                 )
+#                 user_cat_input = right.multiselect(
+#                     label=f"Values for {column}",
+#                     options=options,
+#                     default=valid_defaults,
+#                     key=f"cat_{unique_key}"
+#                 )
+#                 filters[column] = user_cat_input
+#                 df = df[df[column].isin(user_cat_input)]
+#             elif is_numeric_dtype(df[column]):
+#                 _min, _max = float(df[column].min()), float(df[column].max())
+#                 step = (_max - _min) / 100
+#                 # Vérifier si la plage par défaut est valide
+#                 default_range = (
+#                     column_defaults if column_defaults and
+#                     column_defaults[0] >= _min and column_defaults[1] <= _max
+#                     else (_min, _max)
+#                 )
+#                 user_num_input = right.slider(
+#                     f"Values for {column}",
+#                     _min, _max,
+#                     value=default_range,
+#                     step=step,
+#                     key=f"num_{unique_key}"
+#                 )
+#                 filters[column] = user_num_input
+#                 df = df[df[column].between(*user_num_input)]
+#             elif is_datetime64_any_dtype(df[column]):
+#                 default_dates = (
+#                     column_defaults if column_defaults and
+#                     df[column].min() <= column_defaults[0] <= column_defaults[1] <= df[column].max()
+#                     else (df[column].min(), df[column].max())
+#                 )
+#                 user_date_input = right.date_input(
+#                     f"Values for {column}",
+#                     value=default_dates,
+#                     key=f"date_{unique_key}"
+#                 )
+#                 if len(user_date_input) == 2:
+#                     start_date, end_date = map(pd.to_datetime, user_date_input)
+#                     filters[column] = (start_date, end_date)
+#                     df = df.loc[df[column].between(start_date, end_date)]
+#             else:
+#                 user_text_input = right.text_input(
+#                     f"Substring or regex in {column}",
+#                     value=column_defaults if column_defaults else "",
+#                     key=f"text_{unique_key}"
+#                 )
+#                 if user_text_input:
+#                     filters[column] = user_text_input
+#                     df = df[df[column].str.contains(user_text_input)]
+
+#     return df, filters
+
+def df_multiselect_filters(
+    df: pd.DataFrame,
+    default_columns: list = None,
+    key: str = "default",
+    default_values: dict = None  # Dictionnaire pour les valeurs par défaut, avec le mot-clé "__all__"
+) -> (pd.DataFrame, dict):
     """
-    Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display
-    and a unique key for widget differentiation. By default, selects only the first unique value for each column for categorical data.
+    Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display,
+    default values for specific columns, and a unique key for widget differentiation.
+    Supports a special keyword "__all__" in default_values to select all unique values for a column.
 
     Args:
         df (pd.DataFrame): Original dataframe
         default_columns (list, optional): List of column names to display by default.
         key (str, optional): Base key for generating unique widget keys.
+        default_values (dict, optional): Dictionary of default filter values for specific columns, with "__all__" support.
 
     Returns:
         pd.DataFrame: Filtered dataframe
@@ -63,46 +172,72 @@ def df_multiselect_filters(df: pd.DataFrame, default_columns: list = None, key: 
     """
     df = df.copy()
     filters = {}
-    modification_container = st.container()
+    default_values = default_values or {}  # Initialise un dictionnaire vide si non fourni
 
-    with modification_container:
+    with st.container():
         if default_columns is None:
             default_columns = list(df.columns)
 
-        to_filter_columns = st.multiselect("Filter dataframe on", df.columns, default=default_columns, key=f"filter_columns_{key}")
+        to_filter_columns = st.multiselect(
+            "Filter dataframe on",
+            df.columns,
+            default=default_columns,
+            key=f"filter_columns_{key}"
+        )
         
         for column in to_filter_columns:
             left, right = st.columns((1, 20))
             left.write("↳")
-            unique_key = f"{column}_{key}"  # Generate a unique key based on the column and provided key
+            unique_key = f"{column}_{key}"  # Clé unique pour chaque widget
+            column_defaults = default_values.get(column, None)  # Récupère les valeurs par défaut pour cette colonne
 
             if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
-                # Select the first unique value by default for categorical columns
-                default_value = [df[column].dropna().unique()[0]] if df[column].dropna().unique().size > 0 else []
+                options = df[column].unique().tolist()
+                # Si "__all__" est spécifié, utiliser toutes les valeurs uniques comme valeurs par défaut
+                valid_defaults = (
+                    options if column_defaults == "__all__" else
+                    [val for val in column_defaults if val in options] if column_defaults else
+                    [options[0]] if options else []
+                )
                 user_cat_input = right.multiselect(
                     label=f"Values for {column}",
-                    options=df[column].unique().tolist(),
-                    default=default_value,
-                    key=f"cat_{unique_key}"  # Unique key for each multiselect
+                    options=options,
+                    default=valid_defaults,
+                    key=f"cat_{unique_key}"
                 )
                 filters[column] = user_cat_input
                 df = df[df[column].isin(user_cat_input)]
             elif is_numeric_dtype(df[column]):
                 _min, _max = float(df[column].min()), float(df[column].max())
                 step = (_max - _min) / 100
+                # Si "__all__" est spécifié, utiliser toute la plage comme valeur par défaut
+                default_range = (
+                    (_min, _max) if column_defaults == "__all__" else
+                    column_defaults if column_defaults and
+                    column_defaults[0] >= _min and column_defaults[1] <= _max else
+                    (_min, _max)
+                )
                 user_num_input = right.slider(
                     f"Values for {column}",
-                    _min, _max, (_min, _max),
+                    _min, _max,
+                    value=default_range,
                     step=step,
-                    key=f"num_{unique_key}"  # Unique key for each slider numeric
+                    key=f"num_{unique_key}"
                 )
-                filters[column] = user_num_input  # Store the filter value for this column
+                filters[column] = user_num_input
                 df = df[df[column].between(*user_num_input)]
             elif is_datetime64_any_dtype(df[column]):
+                # Si "__all__" est spécifié, utiliser toute la plage de dates comme valeur par défaut
+                default_dates = (
+                    (df[column].min(), df[column].max()) if column_defaults == "__all__" else
+                    column_defaults if column_defaults and
+                    df[column].min() <= column_defaults[0] <= column_defaults[1] <= df[column].max() else
+                    (df[column].min(), df[column].max())
+                )
                 user_date_input = right.date_input(
                     f"Values for {column}",
-                    value=(df[column].min(), df[column].max()),
-                    key=f"date_{unique_key}"  # Unique key for each date input
+                    value=default_dates,
+                    key=f"date_{unique_key}"
                 )
                 if len(user_date_input) == 2:
                     start_date, end_date = map(pd.to_datetime, user_date_input)
@@ -111,23 +246,114 @@ def df_multiselect_filters(df: pd.DataFrame, default_columns: list = None, key: 
             else:
                 user_text_input = right.text_input(
                     f"Substring or regex in {column}",
-                    key=f"text_{unique_key}"  # Unique key for each text input
+                    value=column_defaults if column_defaults else "",
+                    key=f"text_{unique_key}"
                 )
                 if user_text_input:
-                    filters[column] = user_text_input  # Store the filter value for this column
+                    filters[column] = user_text_input
                     df = df[df[column].str.contains(user_text_input)]
 
     return df, filters
 
-def df_selectbox_filters(df: pd.DataFrame, default_columns: list = None, key: str = "default") -> (pd.DataFrame, dict):
+
+# def df_selectbox_filters(df: pd.DataFrame, default_columns: list = None, key: str = "default") -> (pd.DataFrame, dict):
+#     """
+#     Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display
+#     and a unique key for widget differentiation.
+
+#     Args:
+#         df (pd.DataFrame): Original dataframe
+#         default_columns (list, optional): List of column names to display by default.
+#         key (str, optional): Base key for generating unique widget keys.
+
+#     Returns:
+#         pd.DataFrame: Filtered dataframe
+#         dict: Dictionary of applied filters
+#     """
+#     df = df.copy()
+
+#     # Try to convert datetimes into a standard format (datetime, no timezone)
+#     for col in df.columns:
+#         if is_object_dtype(df[col]):
+#             try:
+#                 df[col] = pd.to_datetime(df[col])
+#             except Exception:
+#                 pass
+
+#         if is_datetime64_any_dtype(df[col]):
+#             df[col] = df[col].dt.tz_localize(None)
+    
+#     filters = {}  # Variable pour stocker les filtres sélectionnés
+
+#     modification_container = st.container()
+
+#     with modification_container:
+#         if default_columns is None:
+#             default_columns = list(df.columns)
+
+#         to_filter_columns = st.multiselect("Filter dataframe on", df.columns, default=default_columns, key=f"filter_columns_{key}")
+        
+#         for column in to_filter_columns:
+#             left, right = st.columns((1, 20))
+#             left.write("↳")
+#             unique_key = f"{column}_{key}"  # Générez une clé unique basée sur la colonne et la clé fournie
+
+#             if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
+#                 user_cat_input = right.selectbox(
+#                     label=f"Values for {column}",
+#                     options=df[column].unique().tolist(),
+#                     index=0,
+#                     key=f"cat_{unique_key}"  # Clé unique pour selectbox
+#                 )
+#                 filters[column] = [user_cat_input]  # Stocke la valeur du filtre pour cette colonne dans une liste
+#                 df = df[df[column].isin([user_cat_input])]
+#             elif is_numeric_dtype(df[column]):
+#                 _min, _max = float(df[column].min()), float(df[column].max())
+#                 step = (_max - _min) / 100
+#                 user_num_input = right.slider(
+#                     f"Values for {column}",
+#                     _min, _max, (_min, _max),
+#                     step=step,
+#                     key=f"num_{unique_key}"  # Clé unique pour slider
+#                 )
+#                 filters[column] = user_num_input  # Stocke la valeur du filtre pour cette colonne
+#                 df = df[df[column].between(*user_num_input)]
+#             elif is_datetime64_any_dtype(df[column]):
+#                 user_date_input = right.date_input(
+#                     f"Values for {column}",
+#                     value=(df[column].min(), df[column].max()),
+#                     key=f"date_{unique_key}"  # Clé unique pour date_input
+#                 )
+#                 if len(user_date_input) == 2:
+#                     start_date, end_date = map(pd.to_datetime, user_date_input)
+#                     filters[column] = (start_date, end_date)
+#                     df = df.loc[df[column].between(start_date, end_date)]
+#             else:
+#                 user_text_input = right.text_input(
+#                     f"Substring or regex in {column}",
+#                     key=f"text_{unique_key}"  # Clé unique pour text_input
+#                 )
+#                 if user_text_input:
+#                     filters[column] = user_text_input  # Stocke la valeur du filtre pour cette colonne
+#                     df = df[df[column].str.contains(user_text_input)]
+
+#     return df, filters  # Retourne à la fois le DataFrame filtré et le dictionnaire de filtres
+
+def df_selectbox_filters(
+    df: pd.DataFrame,
+    default_columns: list = None,
+    key: str = "default",
+    default_values: dict = None  # Dictionnaire pour les valeurs par défaut
+) -> (pd.DataFrame, dict):
     """
-    Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display
-    and a unique key for widget differentiation.
+    Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display,
+    default values for specific columns, and a unique key for widget differentiation.
 
     Args:
         df (pd.DataFrame): Original dataframe
         default_columns (list, optional): List of column names to display by default.
         key (str, optional): Base key for generating unique widget keys.
+        default_values (dict, optional): Dictionary of default filter values for specific columns.
 
     Returns:
         pd.DataFrame: Filtered dataframe
@@ -135,18 +361,18 @@ def df_selectbox_filters(df: pd.DataFrame, default_columns: list = None, key: st
     """
     df = df.copy()
 
-    # Try to convert datetimes into a standard format (datetime, no timezone)
+    # Convertir les colonnes datetime si nécessaire
     for col in df.columns:
         if is_object_dtype(df[col]):
             try:
                 df[col] = pd.to_datetime(df[col])
             except Exception:
                 pass
-
         if is_datetime64_any_dtype(df[col]):
             df[col] = df[col].dt.tz_localize(None)
-    
-    filters = {}  # Variable pour stocker les filtres sélectionnés
+
+    filters = {}
+    default_values = default_values or {}  # Initialise un dictionnaire vide si non fourni
 
     modification_container = st.container()
 
@@ -154,38 +380,58 @@ def df_selectbox_filters(df: pd.DataFrame, default_columns: list = None, key: st
         if default_columns is None:
             default_columns = list(df.columns)
 
-        to_filter_columns = st.multiselect("Filter dataframe on", df.columns, default=default_columns, key=f"filter_columns_{key}")
+        to_filter_columns = st.multiselect(
+            "Filter dataframe on",
+            df.columns,
+            default=default_columns,
+            key=f"filter_columns_{key}"
+        )
         
         for column in to_filter_columns:
             left, right = st.columns((1, 20))
             left.write("↳")
-            unique_key = f"{column}_{key}"  # Générez une clé unique basée sur la colonne et la clé fournie
+            unique_key = f"{column}_{key}"  # Clé unique pour chaque widget
+            column_defaults = default_values.get(column, None)  # Récupère les valeurs par défaut pour cette colonne
 
             if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
+                options = df[column].unique().tolist()
+                default_value = (
+                    column_defaults if column_defaults in options else options[0]
+                )  # Vérifie si la valeur par défaut est valide
                 user_cat_input = right.selectbox(
                     label=f"Values for {column}",
-                    options=df[column].unique().tolist(),
-                    index=0,
-                    key=f"cat_{unique_key}"  # Clé unique pour selectbox
+                    options=options,
+                    index=options.index(default_value),
+                    key=f"cat_{unique_key}"
                 )
-                filters[column] = [user_cat_input]  # Stocke la valeur du filtre pour cette colonne dans une liste
+                filters[column] = [user_cat_input]
                 df = df[df[column].isin([user_cat_input])]
             elif is_numeric_dtype(df[column]):
                 _min, _max = float(df[column].min()), float(df[column].max())
                 step = (_max - _min) / 100
+                default_range = (
+                    column_defaults if column_defaults and
+                    column_defaults[0] >= _min and column_defaults[1] <= _max else (_min, _max)
+                )  # Vérifie si la plage est valide
                 user_num_input = right.slider(
                     f"Values for {column}",
-                    _min, _max, (_min, _max),
+                    _min, _max,
+                    value=default_range,
                     step=step,
-                    key=f"num_{unique_key}"  # Clé unique pour slider
+                    key=f"num_{unique_key}"
                 )
-                filters[column] = user_num_input  # Stocke la valeur du filtre pour cette colonne
+                filters[column] = user_num_input
                 df = df[df[column].between(*user_num_input)]
             elif is_datetime64_any_dtype(df[column]):
+                default_dates = (
+                    column_defaults if column_defaults and
+                    df[column].min() <= column_defaults[0] <= column_defaults[1] <= df[column].max()
+                    else (df[column].min(), df[column].max())
+                )  # Vérifie si les dates par défaut sont valides
                 user_date_input = right.date_input(
                     f"Values for {column}",
-                    value=(df[column].min(), df[column].max()),
-                    key=f"date_{unique_key}"  # Clé unique pour date_input
+                    value=default_dates,
+                    key=f"date_{unique_key}"
                 )
                 if len(user_date_input) == 2:
                     start_date, end_date = map(pd.to_datetime, user_date_input)
@@ -194,10 +440,12 @@ def df_selectbox_filters(df: pd.DataFrame, default_columns: list = None, key: st
             else:
                 user_text_input = right.text_input(
                     f"Substring or regex in {column}",
-                    key=f"text_{unique_key}"  # Clé unique pour text_input
+                    value=column_defaults if column_defaults else "",
+                    key=f"text_{unique_key}"
                 )
                 if user_text_input:
-                    filters[column] = user_text_input  # Stocke la valeur du filtre pour cette colonne
+                    filters[column] = user_text_input
                     df = df[df[column].str.contains(user_text_input)]
 
-    return df, filters  # Retourne à la fois le DataFrame filtré et le dictionnaire de filtres
+    return df, filters
+

@@ -28,6 +28,12 @@ st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
 
 st.write("# Welcome to the Slide-Rule app!")
 
+st.divider()
+st.markdown("For more informations on the [NCSP Slide-Rule project](https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule)")
+st.markdown("If you have a feature request or found a bug, please [open an issue](https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues)")
+
+#Contribute to the project
+
 # ______________________________________________________________________________________________________________________
 # Configuration de l'authentification
 # with open('./config.yaml') as file:
@@ -93,6 +99,3 @@ if ms.themes["refreshed"] == False:
 st.divider()
 st.button(btn_face, on_click=ChangeTheme)
 # _______________________
-st.markdown("[NCSP Slide-Rule project](https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule)")
-st.markdown("[Need a feature, report a bug](https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues)")
-
