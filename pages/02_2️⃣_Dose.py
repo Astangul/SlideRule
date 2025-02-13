@@ -354,7 +354,7 @@ with tab1:
 
     # 🔹 Permettre à l'utilisateur d'entrer des distances spécifiques pour calculer la dose
     st.sidebar.divider()
-    user_distances_input = st.sidebar.text_input("Enter distances (comma-separated, in meters):", "5, 10, 50, 100")
+    user_distances_input = st.sidebar.text_input("Enter distances (comma-separated, in meters):", "5, 10, 50, 100, 500, 1000")
     
     # 🔸 Convertir les distances entrées en une liste de valeurs numériques
     try:
