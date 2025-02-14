@@ -60,26 +60,6 @@ st.markdown("If you have a feature request or found a bug, please [open an issue
 
 
 # ________________
-ms = st.session_state
-if "themes" not in ms: 
-    ms.themes = {"current_theme": "light",
-                    "refreshed": True,
-                    
-                    "light": {"theme.base": "dark", 
-                              "theme.backgroundColor": "#0E1117", 
-                              "theme.primaryColor": "#ff4b4b", #"#c98bdb"
-                              "theme.secondaryBackgroundColor": "#262730", #"#5591f5",
-                              "theme.textColor": "white",
-                              "button_face": "🌜"},
-
-                    "dark":  {"theme.base": "light",
-                              "theme.backgroundColor": "white",
-                              "theme.primaryColor": "#6c1d82", #"#5591f5",
-                              "theme.secondaryBackgroundColor": "#F0F2F6", #"#82E1D7",
-                              "theme.textColor": "#0a1464",
-                              "button_face": "🌞"},
-                    }
-  
 
 def ChangeTheme():
     previous_theme = ms.themes["current_theme"]
@@ -89,6 +69,32 @@ def ChangeTheme():
     ms.themes["refreshed"] = False
     if previous_theme == "dark": ms.themes["current_theme"] = "light"
     elif previous_theme == "light": ms.themes["current_theme"] = "dark"
+
+ms = st.session_state
+if "themes" not in ms: 
+    ms.themes = {
+        "current_theme": "light",  
+        "refreshed": True,
+        "light": {  # Thème clair
+            "theme.base": "light", 
+            "theme.backgroundColor": "#FFFFFF", #F9F7F7
+            "theme.primaryColor": "#6c1d82", 
+            "theme.secondaryBackgroundColor": "#F0F2F6", 
+            "theme.textColor": "#000000", # "#0a1464",
+            "button_face": "🌞"
+        },
+        "dark": {  # Thème sombre
+            "theme.base": "dark",
+            "theme.backgroundColor": "#0E1117", 
+            "theme.primaryColor": "#ff4b4b", 
+            "theme.secondaryBackgroundColor": "#262730", 
+            "theme.textColor": "#FFFFFF",
+            "button_face": "🌜"
+        },
+    }
+    # # Simuler le clic en appelant directement la fonction de callback pour appliquer le thème
+    ChangeTheme()
+    ms.theme_initialized = True  # pour éviter de répéter l'initialisation
 
 btn_face = ms.themes["light"]["button_face"] if ms.themes["current_theme"] == "light" else ms.themes["dark"]["button_face"]
 

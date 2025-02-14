@@ -3,10 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from scipy.interpolate import interp1d
-
-
-from utils.utils_func_st import df_multiselect_filters, df_selectbox_filters, normalize_filters, generate_filter_combinations, load_data_with_filters
-from utils.plot_func_st import dose_scatter_plot_3, dose_ratio_scatter_plot_2, dose_ratio_bar_chart_2, generate_analogous_colors
+from utils.plot_func_st import dose_scatter_plot_3, hex_to_rgba, hex_to_complementary_rgba
 
 # ______________________________________________________________________________________________________________________
 # Configuration de la page Streamlit
@@ -26,7 +23,19 @@ main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
 st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
 st.warning('Section in development (WIP)')
 # ______________________________________________________________________________________________________________________
+# Récupérer le thème courant depuis le session_state
+if "themes" in st.session_state:
+    current_theme = st.session_state.themes["current_theme"]
+    # Récupérer la couleur en hexadécimal (par exemple, le texte)
+    hex_color = st.session_state.themes[current_theme]["theme.textColor"]
+else:
+    # Valeur par défaut si le thème n'est pas défini
+    current_theme = "light"
+    hex_color  = "#6c1d82"
 
+total_curve_color_rgba=hex_to_complementary_rgba(hex_color, alpha=1.0)
+total_fill_color_rgba = hex_to_complementary_rgba(hex_color, alpha=0.2)
+# ______________________________________________________________________________________________________________________
 # Chargement des données avec mise en cache
 @st.cache_data
 def load_data(sheet_name):
@@ -161,7 +170,12 @@ with tab1:
     # ______________________________________________________________________________________________________________________
     # Appel de la fonction pour obtenir la figure
     st.write(f"Estimated prompt dose based on total fissions: {fissions_number_input:.1e}")
+
+ 
+    # 🔹 Création de la figure principale
     fig = dose_scatter_plot_3(visu_data, visu_filters, colors)
+    
+
 
     # ______________________________________________________________________________________________________________________
     df_curve_fit = load_data("curve_fit")
@@ -193,7 +207,7 @@ with tab1:
 
     # Fonction pour calculer la dose
     def calculate_interpolated_dose(distance, A, k, b):
-        return A * distance**-k * np.exp(-b * distance)
+        return A * distance**-k * np.exp(-b * distance) * dose_multiplier
 
     # Fonction d'interpolation des paramètres pour une particule donnée (N ou P)
     def interpolate_parameters(filtered_data, particle, T_new):
@@ -268,8 +282,8 @@ with tab1:
     
     color_N = "#9400D3"   # Violet profond pour la courbe interpolée des Neutrons (N)
     color_P = "#FF4500"  # Orange foncé pour la courbe interpolée des Photons (P)
-
-    # Interpolation pour les Neutrons (N)
+    
+    # 🔹 Ajout des courbes interpolées pour Neutrons (N)
     params_N = interpolate_parameters(filtered_curve_fit_data, "N", T_new)
     if params_N:
         x_values = np.logspace(np.log10(1), np.log10(1200), 100)
@@ -281,7 +295,7 @@ with tab1:
             x=x_values,
             y=y_values_N,
             mode='lines',  # ✅ LIGNE CONTINUE SANS MARQUEUR
-            name=f"Interpolated N ({T_new} cm)",
+            name=f"",
             legendgroup="Interpolated N",  # ✅ Groupe de légende
             line=dict(color=color_N),
             hoverinfo='skip'  # ✅ Désactive l'affichage au survol
@@ -322,7 +336,7 @@ with tab1:
             x=x_values,
             y=y_values_P,
             mode='lines',
-            name=f"Interpolated P ({T_new} cm)",
+            name=f"",
             legendgroup="Interpolated P",  # ✅ Groupe de légende
             line=dict(color=color_P),
             hoverinfo='skip'  # ✅ Désactive l'affichage au survol
@@ -351,10 +365,49 @@ with tab1:
             showlegend=False
         ))
 
+    # Vérifier si les interpolations N et P existent avant de créer la somme
+    if params_N and params_P:
+        y_values_total = y_values_N + y_values_P
+        y_values_upper_total = y_values_upper_N + y_values_upper_P
+        y_values_lower_total = y_values_lower_N + y_values_lower_P
+
+        fig.add_trace(go.Scatter(
+            x=x_values,
+            y=y_values_total,
+            mode='lines',
+            name=f"",
+            legendgroup="Total Dose",
+            line=dict(color=total_curve_color_rgba, dash="solid"),
+            hoverinfo='skip'
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=x_values,
+            y=y_values_upper_total,
+            mode='lines',
+            line=dict(width=0),
+            hoverinfo='skip',
+            showlegend=False,
+            legendgroup="Total Dose",
+            fillcolor=total_fill_color_rgba
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=x_values,
+            y=y_values_lower_total,
+            mode='lines',
+            line=dict(width=0),
+            fill='tonexty',
+            legendgroup="Total Dose",
+            fillcolor=total_fill_color_rgba,
+            hoverinfo='skip',
+            showlegend=False
+        ))
+
 
     # 🔹 Permettre à l'utilisateur d'entrer des distances spécifiques pour calculer la dose
     st.sidebar.divider()
-    user_distances_input = st.sidebar.text_input("Enter distances (comma-separated, in meters):", "5, 10, 50, 100, 500, 1000")
+    user_distances_input = st.sidebar.text_input("Enter distances (comma-separated, in meters):", "10, 50, 100, 500, 1000")
     
     # 🔸 Convertir les distances entrées en une liste de valeurs numériques
     try:
@@ -371,41 +424,54 @@ with tab1:
     
         # 🔹 Ajouter les marqueurs 🟢 sur les courbes interpolées
         if params_N:
+            x_values = np.logspace(np.log10(1), np.log10(1200), 100)
+            y_values_N = calculate_interpolated_dose(x_values, params_N["A"], params_N["k"], params_N["b"])
+
             fig.add_trace(go.Scatter(
                 x=user_distances,
                 y=doses_N,
                 mode='markers',
-                name=f"Calculated N doses",
-                marker=dict(symbol='circle', size=10, color=color_N),
-                hoverinfo='text',
-                text=[f"Distance: {d} m<br> Dose N: {dose:.3e} Gy" for d, dose in zip(user_distances, doses_N)],
+                name=f"Interpolated N ({T_new} cm)",
+                marker=dict(symbol='star-square', size=11, color=color_N),    
+                # text=[f"[N] {dose:.3e} Gy" for dose in doses_N],
+                # text=[f"[N] {dose:.3e} Gy" for d, dose in zip(user_distances, doses_N)],
                 legendgroup="Interpolated N"
             ))
     
         if params_P:
+            y_values_P = calculate_interpolated_dose(x_values, params_P["A"], params_P["k"], params_P["b"])
+
             fig.add_trace(go.Scatter(
                 x=user_distances,
                 y=doses_P,
                 mode='markers',
-                name=f"Calculated P doses",
-                marker=dict(symbol='circle', size=10, color=color_P),
-                hoverinfo='text',
-                text=[f"Distance: {d} m<br> Dose P: {dose:.3e} Gy" for d, dose in zip(user_distances, doses_P)],
+                name=f"Interpolated P ({T_new} cm)",
+                marker=dict(symbol='star-square', size=11, color=color_P),
+                # text=[f"[P] {dose:.3e} Gy" for dose in doses_P],
+                # text=[f"[P] {dose:.3e} Gy" for d, dose in zip(user_distances, doses_P)],
                 legendgroup="Interpolated P"
             ))
-    
+        
+        # Calcul de la dose totale à chaque distance
+        if user_distances and params_N and params_P:
+            doses_total = [doses_N[i] + doses_P[i] for i in range(len(user_distances))]
+
+            # Ajouter les marqueurs noirs pour la dose totale
+            fig.add_trace(go.Scatter(
+                x=user_distances,
+                y=doses_total,
+                mode='markers',
+                name=f"Total Dose ({T_new} cm)",
+                marker=dict(symbol='star-square', size=11, color=total_curve_color_rgba),
+                legendgroup="Total Dose"
+            ))
+
+
+
+    fig.layout.update(hovermode="x")  # ✅ Mode de survol unifié
     # 🔹 Affichage du graphique mis à jour avec les points de doses calculés
     st.plotly_chart(fig, use_container_width=True)
-
-
-    # Affichage des paramètres interpolés
-    if params_N:
-        st.write(f"**Interpolated parameters for Neutrons (N):**")
-        st.write(f"A = {params_N['A']:.4e} ± {params_N['A_uncertainty']:.4e}, k = {params_N['k']:.4f} ± {params_N['k_uncertainty']:.4f}, b = {params_N['b']:.4e} ± {params_N['b_uncertainty']:.4e}")
-
-    if params_P:
-        st.write(f"**Interpolated parameters for Photons (P):**")
-        st.write(f"A = {params_P['A']:.4e} ± {params_P['A_uncertainty']:.4e}, k = {params_P['k']:.4f} ± {params_P['k_uncertainty']:.4f}, b = {params_P['b']:.4e} ± {params_P['b_uncertainty']:.4e}")
+    
 
 with tab2:
     # Formatage des colonnes spécifiques
@@ -414,4 +480,54 @@ with tab2:
          "Dose (Gy)": "{:.2e}",       
          "Absolute Uncertainty": "{:.2e}"  
          })
+    st.header("Calulated Doses")
     st.dataframe(formatted_data, hide_index=True)
+
+    if user_distances:
+        # Création du DataFrame pour les doses calculées
+        df_doses = pd.DataFrame({
+            "Distance (m)": user_distances,
+            "Dose Neutrons (Gy)": doses_N if params_N else [None] * len(user_distances),
+            "Dose Photons (Gy)": doses_P if params_P else [None] * len(user_distances),
+            "Total Dose (Gy)": doses_total if (params_N and params_P) else [None] * len(user_distances)
+        })
+
+        # Appliquer un format scientifique aux colonnes de dose
+        formatted_doses = df_doses.style.format({
+            "Distance (m)": "{:.1f}",
+            "Dose Neutrons (Gy)": "{:.2e}",
+            "Dose Photons (Gy)": "{:.2e}",
+            "Total Dose (Gy)": "{:.2e}"
+        })
+
+        # Affichage du tableau des doses calculées
+        st.header("Interpolated Doses at User-Defined Distances")
+        st.dataframe(formatted_doses, hide_index=True)
+
+        
+
+    with st.expander("See explanation"):
+        st.subheader("Equation used for interpolated dose calculation")
+        st.latex(r"D = \frac{N_{\text{fissions}}}{10^{17}} \frac{A}{d^k} \cdot e^{-b \cdot d} \cdot ")
+
+        # Vérifier si les paramètres interpolés existent
+        if params_N or params_P:
+            # Création du DataFrame pour les paramètres interpolés
+            df_params = pd.DataFrame({
+                "Parameter": ["A", "k", "b"],
+                "Neutron Value": [
+                    f"{params_N['A']:.3e} ± {params_N['A_uncertainty']:.3e}" if params_N else "N/A",
+                    f"{params_N['k']:.3f} ± {params_N['k_uncertainty']:.3f}" if params_N else "N/A",
+                    f"{params_N['b']:.3e} ± {params_N['b_uncertainty']:.3e}" if params_N else "N/A"
+                ],
+                "Photon Value": [
+                    f"{params_P['A']:.3e} ± {params_P['A_uncertainty']:.3e}" if params_P else "N/A",
+                    f"{params_P['k']:.3f} ± {params_P['k_uncertainty']:.3f}" if params_P else "N/A",
+                    f"{params_P['b']:.3e} ± {params_P['b_uncertainty']:.3e}" if params_P else "N/A"
+                ]
+            })
+
+            # Affichage du tableau des paramètres interpolés
+            st.subheader("Interpolated parameters")
+            st.dataframe(df_params, hide_index=True)
+# ______________________________________________________________________________________________________________________

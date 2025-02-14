@@ -344,6 +344,7 @@ def dose_scatter_plot_3(data, filters, colors):
     categorical_columns = [col for col in all_categorical_columns if col not in constant_columns]
 
     # Construire dynamiquement la clé unique en excluant les colonnes constantes
+    data = data.copy()
     data["unique_key"] = data.apply(lambda row: '_'.join([f"{row[col]}" for col in categorical_columns]), axis=1)
 
     # Regrouper les données par 'unique_key' et trier
@@ -393,7 +394,6 @@ def dose_scatter_plot_3(data, filters, colors):
         fig.update_yaxes(type='linear', title="Dose (Gy) ± 2σ", tickformat='.2e', minor=dict(ticks="inside", ticklen=6, griddash='dot', showgrid=True))
 
     return fig
-
 
 def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filters, color, fig, series_number):
     compare_filter_combinations = generate_filter_combinations(compare_filters)
