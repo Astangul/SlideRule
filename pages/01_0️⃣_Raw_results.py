@@ -34,13 +34,16 @@ fissions_number_input = 1E17
 selected_data = st.sidebar.selectbox("Select the data to load", ("Shielded configurations", "Sensitivity studies", "Delayed fission gamma"))
 match selected_data:
     case "Delayed fission gamma":
-        st.warning('Delayed fission gamma data not available yet')
+        st.warning('Data not implemented yet. Coming soon...')
         st.stop()
     case "Shielded configurations":
-        selection = st.sidebar.pills("Please choose one", ["Wall"], selection_mode="single", default = "Wall", key="shielded_configurations")
+        selection = st.sidebar.pills("Please choose one", ["Wall", "Wall position"], selection_mode="single", default = "Wall", key="shielded_configurations")
         match selection:
             case None:
                 st.warning('Please select a shielded configuration')
+                st.stop()
+            case "Wall position":
+                st.warning('Data not implemented yet. Coming soon...')
                 st.stop()
             case "Wall":
                 data = load_data('wall')
