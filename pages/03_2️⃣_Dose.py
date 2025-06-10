@@ -181,6 +181,8 @@ with tab1:
 
     # Option d'affichage de la décomposition des particules
     show_components = st.checkbox("Display N and P components", value=False)
+    show_threshold = st.checkbox("Set dose threshold", value=False)
+    threshold_slider_placeholder = st.empty() if show_threshold else None
 
     # Calcul de la dose totale à partir des données calculées
     group_cols = [c for c in visu_data.columns if c not in [
@@ -237,6 +239,21 @@ with tab1:
         plot_df = thickness_df[thickness_df["Thickness (cm)"].isin(highlight)]
     else:
         plot_df = thickness_df
+
+    dose_min = float(plot_df["Dose (Gy)"].min())
+    dose_max = float(plot_df["Dose (Gy)"].max())
+
+    dose_threshold = None
+    if show_threshold:
+        default_threshold = dose_max * 0.2
+        dose_threshold = threshold_slider_placeholder.slider(
+            "Dose threshold (Gy)",
+            min_value=dose_min,
+            max_value=dose_max,
+            value=default_threshold,
+            format="%.2e",
+            key="dose_threshold_slider",
+        )
 
     fig = dose_scatter_plot_3(plot_df, visu_filters, colors)
     # ______________________________________________________________________________________________________________________
@@ -463,6 +480,33 @@ with tab1:
             showlegend=False
         ))
 
+        # ------------------------------------------------------------------
+        # Threshold line and intersection with total dose
+        if show_threshold and dose_threshold is not None:
+            dose_min = float(min(y_values_total))
+            dose_max = float(max(y_values_total))
+            intersection_distance = None
+            if dose_min <= dose_threshold <= dose_max:
+                intersection_distance = float(
+                    np.interp(
+                        dose_threshold,
+                        y_values_total[::-1],
+                        x_values[::-1],
+                    )
+                )
+                fig.add_vline(
+                    x=intersection_distance,
+                    line=dict(color="green", dash="dot"),
+                    annotation_text=f"{intersection_distance:.1f} m",
+                    annotation_position="top left",
+                )
+            fig.add_hline(
+                y=dose_threshold,
+                line=dict(color="green", dash="dash"),
+                annotation_text=f"Threshold {dose_threshold:.2e} Gy",
+                annotation_position="bottom right",
+            )
+            fig.update_yaxes(range=[float(min(y_values_lower_total)), float(max(y_values_upper_total))])
 
     # 🔹 Permettre à l'utilisateur d'entrer des distances spécifiques pour calculer la dose
     st.sidebar.divider()
