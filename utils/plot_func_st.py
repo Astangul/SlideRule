@@ -328,9 +328,12 @@ def dose_scatter_plot_3(data, filters, colors):
     Returns:
         go.Figure: L'objet figure Plotly.
     """
-    log_x = st.toggle("X-axis log scale", value=True, key="log_x_fig1")
-    log_y = st.toggle("Y-axis log scale", value=True, key="log_y_fig1")
-
+    # log_x = st.toggle("X-axis log scale", value=True, key="log_x_fig1")
+    # log_y = st.toggle("Y-axis log scale", value=True, key="log_y_fig1")
+    
+    log_x = st.session_state.get("log_x_fig1", True)
+    log_y = st.session_state.get("log_y_fig1", True)
+    
     fig = go.Figure()
 
     # Déterminer dynamiquement les colonnes catégoriques à utiliser (exclut les colonnes numériques)
@@ -381,7 +384,7 @@ def dose_scatter_plot_3(data, filters, colors):
             x=0.5
         )
     )
-
+    
     # Mise à jour des axes (logarithmique ou linéaire selon l'option de l'utilisateur)
     if log_x:
         fig.update_xaxes(type='log', title="Distance (m) [Log10]", minor=dict(ticks="inside", ticklen=6, griddash='dot', showgrid=True))

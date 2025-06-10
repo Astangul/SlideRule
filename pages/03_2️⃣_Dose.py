@@ -19,7 +19,7 @@ st.set_page_config(
     }
 )
 sidebar_logo_path = "./icons/Slide-Rule_orange.png"
-main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
+main_body_logo_path = "./icons/Slide-Rule_orange.png"
 st.logo(image = sidebar_logo_path, size="large", icon_image = main_body_logo_path)
 st.warning('Section in development (WIP)')
 # ______________________________________________________________________________________________________________________
@@ -179,9 +179,8 @@ with tab1:
     # Appel de la fonction pour obtenir la figure
     st.write(f"Estimated prompt dose based on total fissions: {fissions_number_input:.1e}")
 
-
     # Option d'affichage de la décomposition des particules
-    show_components = st.toggle("Display N and P components", value=False)
+    show_components = st.checkbox("Display N and P components", value=False)
 
     # Calcul de la dose totale à partir des données calculées
     group_cols = [c for c in visu_data.columns if c not in [
@@ -200,13 +199,35 @@ with tab1:
     total_visu_data["1s uncertainty"] = total_visu_data["Absolute Uncertainty"] / total_visu_data["Dose (Gy)"]
     total_visu_data["Particle"] = "Total"
  
-    # 🔹 Création de la figure principale
+    # 🔹 Préparer les courbes à afficher
     if show_components:
-        fig = dose_scatter_plot_3(visu_data, visu_filters, colors)
+        thickness_df = visu_data
     else:
-        fig = dose_scatter_plot_3(total_visu_data, visu_filters, colors)
+        thickness_df = total_visu_data
+
+    thicknesses = sorted(thickness_df["Thickness (cm)"].unique())
+    highlight = []
+    if thicknesses:
+        lower = max([t for t in thicknesses if t <= T_new], default=None)
+        upper = min([t for t in thicknesses if t >= T_new], default=None)
+        if lower is None:
+            highlight = [upper]
+        elif upper is None:
+            highlight = [lower]
+        elif lower == upper:
+            highlight = [lower]
+        else:
+            highlight = [lower, upper]
+
+    if highlight:
+        plot_df = thickness_df[thickness_df["Thickness (cm)"].isin(highlight)]
+    else:
+        plot_df = thickness_df
+
+    fig = dose_scatter_plot_3(plot_df, visu_filters, colors)
     # ______________________________________________________________________________________________________________________
     df_curve_fit = load_data("curve_fit")
+    data["Screen"] = data["Screen"].fillna("None")
 
     def filter_curve_fit_data(data, filters):
         """
@@ -499,22 +520,22 @@ with tab1:
                 legendgroup="Total Dose"
             ))
 
-
-
     fig.layout.update(hovermode="x")  # ✅ Mode de survol unifié
     # 🔹 Affichage du graphique mis à jour avec les points de doses calculés
     st.plotly_chart(fig, use_container_width=True)
+    st.toggle("X-axis log scale", value=st.session_state.get("log_x_fig1", True), key="log_x_fig1")
+    st.toggle("Y-axis log scale", value=st.session_state.get("log_y_fig1", True), key="log_y_fig1")
     
 
 with tab2:
     # Formatage des colonnes spécifiques
     formatted_data = visu_data.style.format({
          "1s uncertainty": "{:.2%}",  # Format en pourcentage avec 2 décimales
-         "Dose (Gy)": "{:.2e}",       
+         "Dose (Gy)": "{:.2e}",
          "Absolute Uncertainty": "{:.2e}"  
          })
-    st.header("Calulated Doses")
-    st.dataframe(formatted_data, hide_index=True)
+    # st.header("Calulated Doses")
+    # st.dataframe(formatted_data, hide_index=True)
 
     if user_distances:
         # Création du DataFrame pour les doses calculées
@@ -533,11 +554,9 @@ with tab2:
             "Total Dose (Gy)": "{:.2e}"
         })
 
-        # Affichage du tableau des doses calculées
+        # Affichage du tableau des doses interpolées
         st.header("Interpolated Doses")
-        st.dataframe(formatted_doses, hide_index=True)
-
-        
+        st.dataframe(formatted_doses, hide_index=True)      
 
     with st.expander("See explanation"):
         st.subheader("Equation used for interpolated dose calculation")
@@ -563,4 +582,9 @@ with tab2:
             # Affichage du tableau des paramètres interpolés
             st.subheader("Interpolated parameters")
             st.dataframe(df_params, hide_index=True)
+        
+    st.divider()
+
+    st.header("Calulated Doses")
+    st.dataframe(formatted_data, hide_index=True)
 # ______________________________________________________________________________________________________________________
