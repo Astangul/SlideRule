@@ -30,8 +30,7 @@ st.write("# Welcome to the Slide-Rule app!")
 
 st.divider()
 st.markdown("For more informations on the [NCSP Slide-Rule project](https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule)")
-st.markdown("If you have a feature request or found a bug, please [open an issue](https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues)")
-
+st.markdown("If you have a feature request or found a bug, please [open an issue](https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues), or [contact me](mailto:johann.herth@asnr.fr)")
 #Contribute to the project
 
 # ______________________________________________________________________________________________________________________

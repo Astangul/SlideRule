@@ -181,7 +181,7 @@ with tab1:
 
     # Option d'affichage de la décomposition des particules
     show_components = st.checkbox("Display N and P components", value=False)
-    show_threshold = st.checkbox("Set dose threshold", value=False)
+    show_threshold = st.checkbox("Display dose threshold", value=False)
     threshold_slider_placeholder = st.empty() if show_threshold else None
 
     # Calcul de la dose totale à partir des données calculées
