@@ -189,8 +189,22 @@ with tab1:
         "1s uncertainty",
         "Absolute Uncertainty",
     ]]
+    # Filter groups to ensure both neutron and photon doses are present before
+    # computing the total. Missing one component can lead to an artificial
+    # drop in the total dose curve.
+    required_particles = {"N", "P"}
+
+    def has_complete_particles(group):
+        """Return True if both N and P doses are present and not null."""
+        valid = group.dropna(subset=["Dose (Gy)"])
+        return required_particles.issubset(set(valid["Particle"]))
+
+    complete_visu_data = (
+        visu_data.groupby(group_cols)
+        .filter(has_complete_particles)
+    )
     total_visu_data = (
-        visu_data.groupby(group_cols, as_index=False)
+        complete_visu_data.groupby(group_cols, as_index=False)
         .agg({
             "Dose (Gy)": "sum",
             "Absolute Uncertainty": lambda x: np.sqrt((x ** 2).sum()),
