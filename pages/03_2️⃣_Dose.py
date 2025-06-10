@@ -244,16 +244,20 @@ with tab1:
     dose_max = float(plot_df["Dose (Gy)"].max())
 
     dose_threshold = None
+    intersection_distance = None
+    intersection_placeholder = None
     if show_threshold:
-        default_threshold = dose_max * 0.2
-        dose_threshold = threshold_slider_placeholder.slider(
+        default_threshold = dose_min * 50
+        dose_threshold = threshold_slider_placeholder.number_input(
             "Dose threshold (Gy)",
             min_value=dose_min,
             max_value=dose_max,
             value=default_threshold,
+            step=(dose_max - dose_min) / 100 if dose_max > dose_min else 0.01,
             format="%.2e",
-            key="dose_threshold_slider",
+            key="dose_threshold_input",
         )
+        intersection_placeholder = st.empty()
 
     fig = dose_scatter_plot_3(plot_df, visu_filters, colors)
     # ______________________________________________________________________________________________________________________
@@ -497,17 +501,40 @@ with tab1:
                 fig.add_vline(
                     x=intersection_distance,
                     line=dict(color="green", dash="dot"),
-                    annotation_text=f"{intersection_distance:.1f} m",
-                    annotation_position="top left",
                 )
             fig.add_hline(
                 y=dose_threshold,
                 line=dict(color="green", dash="dash"),
-                annotation_text=f"Threshold {dose_threshold:.2e} Gy",
-                annotation_position="bottom right",
             )
-            fig.update_yaxes(range=[float(min(y_values_lower_total)), float(max(y_values_upper_total))])
+    
+    # Détermination des bornes des axes pour conserver l'échelle
+    dist_min = min(plot_df["Distance (m)"].min(), np.min(x_values))
+    dist_max = max(plot_df["Distance (m)"].max(), np.max(x_values))
 
+    dose_min_plot = plot_df["Dose (Gy)"].min()
+    dose_max_plot = plot_df["Dose (Gy)"].max()
+    if params_N and params_P:
+        dose_min_plot = min(dose_min_plot, float(np.min(y_values_lower_total)))
+        dose_max_plot = max(dose_max_plot, float(np.max(y_values_upper_total)))
+
+    log_x_flag = st.session_state.get("log_x_fig1", True)
+    log_y_flag = st.session_state.get("log_y_fig1", True)
+
+    if log_x_flag:
+        fig.update_xaxes(range=[np.log10(dist_min), np.log10(dist_max)])
+    else:
+        fig.update_xaxes(range=[dist_min, dist_max])
+
+    if log_y_flag:
+        fig.update_yaxes(range=[np.log10(dose_min_plot), np.log10(dose_max_plot)])
+    else:
+        fig.update_yaxes(range=[dose_min_plot, dose_max_plot])
+
+    if intersection_placeholder and intersection_distance is not None:
+        intersection_placeholder.write(
+            f"Distance at threshold: {intersection_distance:.1f} m"
+        )
+    # ------------------------------------------------------------------
     # 🔹 Permettre à l'utilisateur d'entrer des distances spécifiques pour calculer la dose
     st.sidebar.divider()
     user_distances_input = st.sidebar.text_input("Enter distances (semicolon-separated, in meters):", "10; 50; 100; 500; 1000")    
