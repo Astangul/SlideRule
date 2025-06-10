@@ -20,7 +20,7 @@ st.set_page_config(
 )
 sidebar_logo_path = "./icons/Slide-Rule_orange.png"
 main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
-st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
+st.logo(image = sidebar_logo_path, size="large", icon_image = main_body_logo_path)
 st.warning('Section in development (WIP)')
 # ______________________________________________________________________________________________________________________
 # Récupérer le thème courant depuis le session_state
@@ -108,6 +108,23 @@ dose_multiplier = fissions_number_input / 1e17
 data["Absolute Uncertainty"] =  data["Dose (Gy)"] * data["1s uncertainty"] * dose_multiplier
 data["Dose (Gy)"] = data["Dose (Gy)"] * dose_multiplier
 
+
+st.sidebar.divider()
+available_screens = [s for s in data["Screen"].unique() if s != "None"]
+default_screen_index = available_screens.index("Concrete") if "Concrete" in available_screens else 0
+selected_screen = st.sidebar.selectbox(
+    "Select screen material",
+    options=available_screens,
+    index=default_screen_index,
+)
+T_new = st.sidebar.number_input(
+    "Enter screen thickness (cm) for interpolation:",
+    min_value=0.0,
+    step=1.0,
+    value=15.0,
+)
+
+
 # Définition des couleurs
 # colors = ['#2E91E5', '#E15F99', '#1CA71C', '#FB0D0D', '#DA16FF', '#222A2A', '#B68100', '#750D86', '#EB663B', '#511CFB', '#00A08B', '#FB00D1', '#FC0080', '#B2828D', '#6C7C32', '#778AAE', '#862A16', '#A777F1', '#620042', '#1616A7', '#DA60CA', '#6C4516', '#0D2A63', '#AF0038']
 # colors = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52']
@@ -125,7 +142,6 @@ with tab1:
         fixed_default_values = {
             "Fissile": ['U'],  # Une seule valeur possible
             "Case": ['C1 [U(4.95)O2F2 (H/235U = 410)]'],  # Une seule valeur possible
-            "Screen": ["None", "Concrete"]  # "None" obligatoire + 1 choix max
         }
 
         # Sélection unique pour "Fissile"
@@ -134,15 +150,7 @@ with tab1:
         # Sélection unique pour "Case"
         selected_case = st.selectbox("Select case", options=data["Case"].unique(), index=0)
 
-        # Sélection personnalisée pour "Screen" : "None" obligatoire + un seul autre écran possible
-        available_screens = [s for s in data["Screen"].unique() if s != "None"]  # Exclut "None" temporairement
-        selected_screens = st.multiselect("Select screen material", 
-                                          options=available_screens, 
-                                          default=["Concrete"], 
-                                          max_selections=1)  # Limite à 1 choix
-
-        # Assurer que "None" est toujours inclus
-        selected_screens.insert(0, "None")
+        selected_screens = ["None", selected_screen]
 
         # Construire le dictionnaire des filtres avec ces valeurs fixes
         visu_filters = {
@@ -171,12 +179,32 @@ with tab1:
     # Appel de la fonction pour obtenir la figure
     st.write(f"Estimated prompt dose based on total fissions: {fissions_number_input:.1e}")
 
+
+    # Option d'affichage de la décomposition des particules
+    show_components = st.toggle("Display N and P components", value=False)
+
+    # Calcul de la dose totale à partir des données calculées
+    group_cols = [c for c in visu_data.columns if c not in [
+        "Particle",
+        "Dose (Gy)",
+        "1s uncertainty",
+        "Absolute Uncertainty",
+    ]]
+    total_visu_data = (
+        visu_data.groupby(group_cols, as_index=False)
+        .agg({
+            "Dose (Gy)": "sum",
+            "Absolute Uncertainty": lambda x: np.sqrt((x ** 2).sum()),
+        })
+    )
+    total_visu_data["1s uncertainty"] = total_visu_data["Absolute Uncertainty"] / total_visu_data["Dose (Gy)"]
+    total_visu_data["Particle"] = "Total"
  
     # 🔹 Création de la figure principale
-    fig = dose_scatter_plot_3(visu_data, visu_filters, colors)
-    
-
-
+    if show_components:
+        fig = dose_scatter_plot_3(visu_data, visu_filters, colors)
+    else:
+        fig = dose_scatter_plot_3(total_visu_data, visu_filters, colors)
     # ______________________________________________________________________________________________________________________
     df_curve_fit = load_data("curve_fit")
 
@@ -276,10 +304,6 @@ with tab1:
             "b_uncertainty": b_uncertainty_new
         }
 
-    # Récupération de l'épaisseur choisie par l'utilisateur
-    st.sidebar.divider()
-    T_new = st.sidebar.number_input("Enter screen thickness (cm) for interpolation:", min_value=0.0, step=1.0, value=15.0)
-    
     color_N = "#9400D3"   # Violet profond pour la courbe interpolée des Neutrons (N)
     color_P = "#FF4500"  # Orange foncé pour la courbe interpolée des Photons (P)
     
@@ -291,39 +315,39 @@ with tab1:
         y_values_upper_N = calculate_interpolated_dose(x_values, params_N["A"] + params_N["A_uncertainty"], params_N["k"] + params_N["k_uncertainty"], params_N["b"] + params_N["b_uncertainty"])
         y_values_lower_N = calculate_interpolated_dose(x_values, params_N["A"] - params_N["A_uncertainty"], params_N["k"] - params_N["k_uncertainty"], params_N["b"] - params_N["b_uncertainty"])
 
-        fig.add_trace(go.Scatter(
-            x=x_values,
-            y=y_values_N,
-            mode='lines',  # ✅ LIGNE CONTINUE SANS MARQUEUR
-            name=f"",
-            legendgroup="Interpolated N",  # ✅ Groupe de légende
-            line=dict(color=color_N),
-            hoverinfo='skip'  # ✅ Désactive l'affichage au survol
-        ))
+        if show_components:
+            fig.add_trace(go.Scatter(
+                x=x_values,
+                y=y_values_N,
+                mode='lines',  # ✅ LIGNE CONTINUE SANS MARQUEUR
+                name=f"",
+                legendgroup="Interpolated N",  # ✅ Groupe de légende
+                line=dict(color=color_N),
+                hoverinfo='skip'  # ✅ Désactive l'affichage au survol
+            ))
 
-        fig.add_trace(go.Scatter(
-            x=x_values,
-            y=y_values_upper_N,
-            mode='lines',
-            line=dict(width=0),
-            hoverinfo='skip', # ✅ Désactive l'affichage au survol
-            showlegend=False,
-            legendgroup="Interpolated N",  # ✅ Lie la bande à la légende principale
-            fillcolor='rgba(148, 0, 211, 0.2)'
-        ))
+            fig.add_trace(go.Scatter(
+                x=x_values,
+                y=y_values_upper_N,
+                mode='lines',
+                line=dict(width=0),
+                hoverinfo='skip', # ✅ Désactive l'affichage au survol
+                showlegend=False,
+                legendgroup="Interpolated N",  # ✅ Lie la bande à la légende principale
+                fillcolor='rgba(148, 0, 211, 0.2)'
+            ))
 
-        fig.add_trace(go.Scatter(
-            x=x_values,
-            y=y_values_lower_N,
-            mode='lines',
-            line=dict(width=0),
-            fill='tonexty',
-            legendgroup="Interpolated N",  # ✅ Lie la bande à la légende principale
-            fillcolor='rgba(148, 0, 211, 0.2)',
-            hoverinfo='skip', # ✅ Désactive l'affichage au survol
-            showlegend=False
-        ))
-
+            fig.add_trace(go.Scatter(
+                x=x_values,
+                y=y_values_lower_N,
+                mode='lines',
+                line=dict(width=0),
+                fill='tonexty',
+                legendgroup="Interpolated N",  # ✅ Lie la bande à la légende principale
+                fillcolor='rgba(148, 0, 211, 0.2)',
+                hoverinfo='skip', # ✅ Désactive l'affichage au survol
+                showlegend=False
+            ))
 
     # Interpolation pour les Photons (P)
     params_P = interpolate_parameters(filtered_curve_fit_data, "P", T_new)
@@ -332,39 +356,39 @@ with tab1:
         y_values_upper_P = calculate_interpolated_dose(x_values, params_P["A"] + params_P["A_uncertainty"], params_P["k"] + params_P["k_uncertainty"], params_P["b"] + params_P["b_uncertainty"])
         y_values_lower_P = calculate_interpolated_dose(x_values, params_P["A"] - params_P["A_uncertainty"], params_P["k"] - params_P["k_uncertainty"], params_P["b"] - params_P["b_uncertainty"])
 
-        fig.add_trace(go.Scatter(
-            x=x_values,
-            y=y_values_P,
-            mode='lines',
-            name=f"",
-            legendgroup="Interpolated P",  # ✅ Groupe de légende
-            line=dict(color=color_P),
-            hoverinfo='skip'  # ✅ Désactive l'affichage au survol
-        ))
+        if show_components:
+            fig.add_trace(go.Scatter(
+                x=x_values,
+                y=y_values_P,
+                mode='lines',
+                name=f"",
+                legendgroup="Interpolated P",  # ✅ Groupe de légende
+                line=dict(color=color_P),
+                hoverinfo='skip'  # ✅ Désactive l'affichage au survol
+            ))
 
-        fig.add_trace(go.Scatter(
-            x=x_values,
-            y=y_values_upper_P,
-            mode='lines',
-            line=dict(width=0),
-            hoverinfo='skip', # ✅ Désactive l'affichage au survol
-            showlegend=False,
-            legendgroup="Interpolated P",  # ✅ Lie la bande à la légende principale
-            fillcolor='rgba(255, 69, 0, 0.2)'
-        ))
-
-        fig.add_trace(go.Scatter(
-            x=x_values,
-            y=y_values_lower_P,
-            mode='lines',
-            line=dict(width=0),
-            fill='tonexty',
-            legendgroup="Interpolated P",  # ✅ Lie la bande à la légende principale
-            fillcolor='rgba(255, 69, 0, 0.2)',
-            hoverinfo='skip', # ✅ Désactive l'affichage au survol
-            showlegend=False
-        ))
-
+            fig.add_trace(go.Scatter(
+                x=x_values,
+                y=y_values_upper_P,
+                mode='lines',
+                line=dict(width=0),
+                hoverinfo='skip', # ✅ Désactive l'affichage au survol
+                showlegend=False,
+                legendgroup="Interpolated P",  # ✅ Lie la bande à la légende principale
+                fillcolor='rgba(255, 69, 0, 0.2)'
+            ))
+        
+            fig.add_trace(go.Scatter(
+                x=x_values,
+                y=y_values_lower_P,
+                mode='lines',
+                line=dict(width=0),
+                fill='tonexty',
+                legendgroup="Interpolated P",  # ✅ Lie la bande à la légende principale
+                fillcolor='rgba(255, 69, 0, 0.2)',
+                hoverinfo='skip', # ✅ Désactive l'affichage au survol
+                showlegend=False
+            ))
     # Vérifier si les interpolations N et P existent avant de créer la somme
     if params_N and params_P:
         y_values_total = y_values_N + y_values_P
@@ -407,23 +431,32 @@ with tab1:
 
     # 🔹 Permettre à l'utilisateur d'entrer des distances spécifiques pour calculer la dose
     st.sidebar.divider()
-    user_distances_input = st.sidebar.text_input("Enter distances (comma-separated, in meters):", "10, 50, 100, 500, 1000")
-    
+    user_distances_input = st.sidebar.text_input("Enter distances (semicolon-separated, in meters):", "10; 50; 100; 500; 1000")    
     # 🔸 Convertir les distances entrées en une liste de valeurs numériques
     try:
-        user_distances = [float(d.strip()) for d in user_distances_input.split(",") if d.strip()]
+        user_distances = [float(d.strip()) for d in user_distances_input.split(";") if d.strip()]
         user_distances = [d for d in user_distances if d > 0]  # Filtrer les valeurs négatives
     except ValueError:
-        st.sidebar.error("Invalid input. Please enter comma-separated numeric values.")
+        st.sidebar.error("Invalid input. Please enter semicolon-separated numeric values.")
         user_distances = []
     
+    # Range check based on available data
+    min_dist = visu_data["Distance (m)"].min()
+    max_dist = visu_data["Distance (m)"].max()
+    invalid_distances = [d for d in user_distances if d < min_dist or d > max_dist]
+    if invalid_distances:
+        st.warning(
+            f"Distances {invalid_distances} are outside the valid range ({min_dist:.1f} - {max_dist:.1f} m)."
+        )
+
     # 🔸 Calculer les doses aux distances spécifiées
     if user_distances:
         doses_N = [calculate_interpolated_dose(d, params_N["A"], params_N["k"], params_N["b"]) for d in user_distances] if params_N else []
         doses_P = [calculate_interpolated_dose(d, params_P["A"], params_P["k"], params_P["b"]) for d in user_distances] if params_P else []
-    
+     
         # 🔹 Ajouter les marqueurs 🟢 sur les courbes interpolées
-        if params_N:
+        if show_components and params_N:
+
             x_values = np.logspace(np.log10(1), np.log10(1200), 100)
             y_values_N = calculate_interpolated_dose(x_values, params_N["A"], params_N["k"], params_N["b"])
 
@@ -438,7 +471,7 @@ with tab1:
                 legendgroup="Interpolated N"
             ))
     
-        if params_P:
+        if show_components and params_P:
             y_values_P = calculate_interpolated_dose(x_values, params_P["A"], params_P["k"], params_P["b"])
 
             fig.add_trace(go.Scatter(
@@ -501,7 +534,7 @@ with tab2:
         })
 
         # Affichage du tableau des doses calculées
-        st.header("Interpolated Doses at User-Defined Distances")
+        st.header("Interpolated Doses")
         st.dataframe(formatted_doses, hide_index=True)
 
         
