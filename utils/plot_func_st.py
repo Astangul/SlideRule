@@ -396,6 +396,10 @@ def dose_scatter_plot_3(data, filters, colors):
     else:
         fig.update_yaxes(type='linear', title="Dose (Gy) ± 2σ", tickformat='.2e', minor=dict(ticks="inside", ticklen=6, griddash='dot', showgrid=True))
 
+    # Ensure the axes automatically rescale to the plotted data
+    fig.update_xaxes(autorange=True)
+    fig.update_yaxes(autorange=True)
+    
     return fig
 
 def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filters, color, fig, series_number):

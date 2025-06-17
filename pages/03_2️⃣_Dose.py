@@ -181,7 +181,7 @@ with tab1:
 
     # Option d'affichage de la décomposition des particules
     show_components = st.checkbox("Display N and P components", value=False)
-    show_threshold = st.checkbox("Display dose threshold", value=False)
+    show_threshold = st.checkbox("Set total dose threshold", value=False)
     threshold_slider_placeholder = st.empty() if show_threshold else None
 
     # Calcul de la dose totale à partir des données calculées
@@ -507,29 +507,7 @@ with tab1:
                 line=dict(color="green", dash="dash"),
             )
     
-    # Détermination des bornes des axes pour conserver l'échelle
-    dist_min = min(plot_df["Distance (m)"].min(), np.min(x_values))
-    dist_max = max(plot_df["Distance (m)"].max(), np.max(x_values))
-
-    dose_min_plot = plot_df["Dose (Gy)"].min()
-    dose_max_plot = plot_df["Dose (Gy)"].max()
-    if params_N and params_P:
-        dose_min_plot = min(dose_min_plot, float(np.min(y_values_lower_total)))
-        dose_max_plot = max(dose_max_plot, float(np.max(y_values_upper_total)))
-
-    log_x_flag = st.session_state.get("log_x_fig1", True)
-    log_y_flag = st.session_state.get("log_y_fig1", True)
-
-    if log_x_flag:
-        fig.update_xaxes(range=[np.log10(dist_min), np.log10(dist_max)])
-    else:
-        fig.update_xaxes(range=[dist_min, dist_max])
-
-    if log_y_flag:
-        fig.update_yaxes(range=[np.log10(dose_min_plot), np.log10(dose_max_plot)])
-    else:
-        fig.update_yaxes(range=[dose_min_plot, dose_max_plot])
-
+    # ------------------------------------------------------------------
     if intersection_placeholder and intersection_distance is not None:
         intersection_placeholder.write(
             f"Distance at threshold: {intersection_distance:.1f} m"
