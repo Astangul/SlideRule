@@ -264,7 +264,7 @@ def dose_ratio_bar_chart(compare_data, ref_data, colors):
 
     st.plotly_chart(fig2, use_container_width=True)
 
-def dose_scatter_plot_2(data, filters, colors):
+def dose_scatter_plot_2(data, filters, colors, sigma_multiplier=2.0):
     log_x = st.toggle("X-axis log scale", value=True, key="log_x_fig1")
     log_y = st.toggle("Y-axis log scale", value=True, key="log_y_fig1")
     fig1 = go.Figure()
@@ -283,7 +283,7 @@ def dose_scatter_plot_2(data, filters, colors):
                                   marker_symbol='circle-dot', marker_size=8,
                                   line=dict(dash='dash', color=colors[index % len(colors)]),
                                   name=f'{key}',
-                                  error_y=dict(type='data', array=2*group["Absolute Uncertainty"], visible=True)
+                                  error_y=dict(type='data', array=sigma_multiplier*group["Absolute Uncertainty"], visible=True)
                                   ))
 
     fig1.update_layout(
@@ -310,9 +310,9 @@ def dose_scatter_plot_2(data, filters, colors):
         fig1.update_xaxes(type='linear', title="Distance (m)")
     
     if log_y:
-        fig1.update_yaxes(type='log', title="Dose (Gy) ± 2σ [Log10]", tickformat='.2e')
+        fig1.update_yaxes(type='log', title=f"Dose (Gy) ± {int(sigma_multiplier)}σ [Log10]", tickformat='.2e')
     else:
-        fig1.update_yaxes(type='linear', title="Dose (Gy) ± 2σ", tickformat='.2e')
+        fig1.update_yaxes(type='linear', title=f"Dose (Gy) ± {int(sigma_multiplier)}σ", tickformat='.2e')
 
     st.plotly_chart(fig1, use_container_width=True)
 
@@ -402,7 +402,7 @@ def dose_scatter_plot_3(data, filters, colors):
     
     return fig
 
-def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filters, color, fig, series_number):
+def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filters, color, fig, series_number, sigma_multiplier=1.0):
     compare_filter_combinations = generate_filter_combinations(compare_filters)
     
     # Génération de couleurs analogues
@@ -418,7 +418,7 @@ def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filte
     merged_data = compare_data.merge(ref_data, on="Distance (m)", suffixes=('', '_ref'))
     merged_data['Dose Ratio'] = merged_data['Dose (Gy)'] / merged_data['Dose (Gy)_ref']
     merged_data['Combined Uncertainty'] = np.sqrt(np.square(merged_data['1s uncertainty']) + np.square(merged_data['1s uncertainty_ref']))
-    merged_data['Absolute Combined Uncertainty'] = merged_data['Combined Uncertainty'] * merged_data['Dose Ratio']
+    merged_data['Absolute Combined Uncertainty'] = merged_data['Combined Uncertainty'] * merged_data['Dose Ratio'] * sigma_multiplier
 
     # Conversion des distances en chaînes pour un axe x catégoriel
     merged_data['Distance (m)'] = merged_data['Distance (m)'].astype(str)
@@ -472,7 +472,7 @@ def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filte
         legend_title="Click on legends below to hide/show:", 
         xaxis={'showgrid': True}, 
         yaxis={'showgrid': True, 
-               'title': "Dose Ratio",
+               'title': f"Dose Ratio ± {int(sigma_multiplier)}σ",
                'tickmode': 'auto',
                'minor': {
                    'ticks': "inside",
@@ -482,10 +482,10 @@ def dose_ratio_scatter_plot_2(compare_data, compare_filters, ref_data, ref_filte
                }
         })
 
-def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters, color, fig2, series_number):
+def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters, color, fig2, series_number, sigma_multiplier=1.0):
     compare_filter_combinations = generate_filter_combinations(compare_filters)
 
-    title = "Dose Ratio"
+    title = f"Dose Ratio ± {int(sigma_multiplier)}σ"
 
     # Génération de couleurs analogues
     num_cases = len(compare_filter_combinations)
@@ -500,7 +500,7 @@ def dose_ratio_bar_chart_2(compare_data, compare_filters, ref_data, ref_filters,
     merged_data = compare_data.merge(ref_data, on="Distance (m)", suffixes=('', '_ref'))
     merged_data['Dose Ratio'] = merged_data['Dose (Gy)'] / merged_data['Dose (Gy)_ref']
     merged_data['Combined Uncertainty'] = np.sqrt(np.square(merged_data['1s uncertainty']) + np.square(merged_data['1s uncertainty_ref']))
-    merged_data['Absolute Combined Uncertainty'] = merged_data['Combined Uncertainty'] * merged_data['Dose Ratio']
+    merged_data['Absolute Combined Uncertainty'] = merged_data['Combined Uncertainty'] * merged_data['Dose Ratio'] * sigma_multiplier
 
     # Conversion des distances pour l'axe des x catégoriel
     merged_data['Distance (m)'] = merged_data['Distance (m)'].astype(str)
