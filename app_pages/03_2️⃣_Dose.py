@@ -6,21 +6,6 @@ from scipy.interpolate import interp1d
 from utils.plot_func_st import dose_scatter_plot_3, hex_to_rgba, hex_to_complementary_rgba
 
 # ______________________________________________________________________________________________________________________
-# Configuration de la page Streamlit
-st.set_page_config(
-    page_title="Slide-Rule",
-    page_icon="📏",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': "https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues",
-        'About': "https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule"
-    }
-)
-sidebar_logo_path = "./icons/Slide-Rule_orange.png"
-main_body_logo_path = "./icons/Slide-Rule_orange.png"
-st.logo(image = sidebar_logo_path, size="large", icon_image = main_body_logo_path)
 st.warning('Section in development (WIP)')
 # ______________________________________________________________________________________________________________________
 # Récupérer le thème courant depuis le session_state
@@ -39,7 +24,7 @@ total_fill_color_rgba = hex_to_complementary_rgba(hex_color, alpha=0.2)
 # Chargement des données avec mise en cache
 @st.cache_data
 def load_data(sheet_name):
-    return pd.read_excel("./DB/All-at-once_DB.xlsx", sheet_name=sheet_name)
+    return pd.read_excel("./Database/All-at-once_DB.xlsx", sheet_name=sheet_name)
 
 data = load_data('final')
 

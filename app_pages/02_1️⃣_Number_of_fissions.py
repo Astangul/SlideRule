@@ -2,22 +2,6 @@ import streamlit as st
 import pandas as pd
 
 # ______________________________________________________________________________________________________________________
-# Configuration de la page Streamlit
-st.set_page_config(
-    page_title="Slide-Rule",
-    page_icon="📏",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': "https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues",
-        'About': "https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule"
-    }
-)
-sidebar_logo_path = "./icons/Slide-Rule_orange.png"
-main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
-st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
-# ______________________________________________________________________________________________________________________
 accident_type = st.sidebar.selectbox(
     "Type of criticality accident",
     ("Solution", "Dry or low-moderated powder", "Rods/assemblies in water", "Dry solid metal")
@@ -172,7 +156,7 @@ match accident_type:
                 with col1:
                     m_powder = st.number_input("m_*powder* (kg)", value=1.0, help="Total mass of UO2 powder (in kg).")
                 with col3:
-                    m_water_crit_geo = st.number_input("m_*water_crit_geom* (kg)", value=0.5, min_value=0.0, max_value=m_water, help="Minimum critical mass of water for the considered geometry (in kg). See https://licorne.irsn.fr/")
+                    m_water_crit_geo = st.number_input("m_*water_crit_geom* (kg)", value=0.5, min_value=0.0, max_value=m_water, help="Minimum critical mass of water for the considered geometry (in kg). See https://licorne.asnr.fr/")
                 if m_water_crit_geo >= m_water:
                     # Message d'erreur si la condition n'est pas respectée
                     st.error("m_water_crit_geom must be less than m_water. Please adjust the values.")

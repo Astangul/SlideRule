@@ -7,27 +7,11 @@ from utils.utils_func_st import df_multiselect_filters, df_selectbox_filters, no
 from utils.plot_func_st import dose_scatter_plot_2, dose_ratio_scatter_plot_2, dose_ratio_bar_chart_2, generate_analogous_colors
 
 # ______________________________________________________________________________________________________________________
-# Configuration de la page Streamlit
-st.set_page_config(
-    page_title="Slide-Rule",
-    page_icon="📏",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': "https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues",
-        'About': "https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule"
-    }
-)
-sidebar_logo_path = "./icons/Slide-Rule_orange.png"
-main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
-st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
-# ______________________________________________________________________________________________________________________
 
 # Chargement des données avec mise en cache
 @st.cache_data
 def load_data(sheet_name):
-    return pd.read_excel("./DB/All-at-once_DB.xlsx", sheet_name=sheet_name)
+    return pd.read_excel("./Database/All-at-once_DB.xlsx", sheet_name=sheet_name)
 
 fissions_number_input = 1E17
 
@@ -121,10 +105,44 @@ data["Absolute Uncertainty"] =  data["Dose (Gy)"] * data["1s uncertainty"]
 # data["Dose (Gy)"] = data["Dose (Gy)"] * dose_multiplier
 
 
-# Définition des couleurs
-# colors = ['#2E91E5', '#E15F99', '#1CA71C', '#FB0D0D', '#DA16FF', '#222A2A', '#B68100', '#750D86', '#EB663B', '#511CFB', '#00A08B', '#FB00D1', '#FC0080', '#B2828D', '#6C7C32', '#778AAE', '#862A16', '#A777F1', '#620042', '#1616A7', '#DA60CA', '#6C4516', '#0D2A63', '#AF0038']
-# colors = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52']
-colors = ['#FD3216', '#00FE35', '#6A76FC', '#FED4C4', '#FE00CE', '#0DF9FF', '#F6F926', '#FF9616', '#479B55', '#EEA6FB', '#DC587D', '#D626FF', '#6E899C', '#00B5F7', '#B68E00', '#C9FBE5', '#FF0092', '#22FFA7', '#E3EE9E', '#86CE00', '#BC7196', '#7E7DCD', '#FC6955', '#E48F72']
+# Définition des couleurs par défaut
+default_colors = ['#FD3216', '#00FE35', '#6A76FC', '#FED4C4', '#FE00CE', '#0DF9FF', '#F6F926', '#FF9616', '#479B55', '#EEA6FB', '#DC587D', '#D626FF', '#6E899C', '#00B5F7', '#B68E00', '#C9FBE5', '#FF0092', '#22FFA7', '#E3EE9E', '#86CE00', '#BC7196', '#7E7DCD', '#FC6955', '#E48F72']
+
+# Initialisation de la palette de couleurs personnalisée dans session_state
+if 'custom_colors' not in st.session_state:
+    st.session_state.custom_colors = default_colors.copy()
+
+# Expander pour personnaliser les couleurs
+with st.expander("🎨 Customize color palette (click to expand/collapse)", expanded=False):
+    st.write("Customize the colors used in the plots. Changes will apply to all graphs on this page.")
+    
+    # Créer des colonnes pour organiser les color pickers
+    num_colors_to_show = 12  # Afficher les 12 premières couleurs (suffisant pour la plupart des cas)
+    cols = st.columns(6)
+    
+    for i in range(num_colors_to_show):
+        with cols[i % 6]:
+            new_color = st.color_picker(
+                f"Color {i+1}",
+                value=st.session_state.custom_colors[i],
+                key=f"color_picker_{i}"
+            )
+            st.session_state.custom_colors[i] = new_color
+    
+    # Bouton pour réinitialiser les couleurs
+    col_reset1, col_reset2, col_reset3 = st.columns([1, 1, 4])
+    with col_reset1:
+        if st.button("🔄 Reset colors", help="Reset all colors to default values"):
+            st.session_state.custom_colors = default_colors.copy()
+            st.rerun()
+    with col_reset2:
+        if st.button("🎲 Randomize", help="Generate random colors"):
+            import random
+            st.session_state.custom_colors = ['#' + ''.join([random.choice('0123456789ABCDEF') for _ in range(6)]) for _ in range(len(default_colors))]
+            st.rerun()
+
+# Utiliser la palette personnalisée
+colors = st.session_state.custom_colors
 
 # Création des onglets
 tab1, tab2, tab3 = st.tabs(["📈 Visualize", "🆚 Compare", "🔍 Anomalies"])

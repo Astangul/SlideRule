@@ -21,45 +21,8 @@ sidebar_logo_path = "./icons/Slide-Rule_orange.png"
 main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
 st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
 
-# Ajouter l'image dans la sidebar
-# image_path = "./icons/Slide-Rule_orange.png"
-# st.sidebar.image(image_path, use_column_width=True)
 # ______________________________________________________________________________________________________________________
-
-st.write("# Welcome to the Slide-Rule app!")
-
-st.divider()
-st.markdown("For more informations on the [NCSP Slide-Rule project](https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule)")
-st.markdown("If you have a feature request or found a bug, please [open an issue](https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues), or [contact me](mailto:johann.herth@asnr.fr)")
-#Contribute to the project
-
-# ______________________________________________________________________________________________________________________
-# Configuration de l'authentification
-# with open('./config.yaml') as file:
-#     config = yaml.load(file, Loader=SafeLoader)
-
-# authenticator = stauth.Authenticate(
-#     config['credentials'],
-#     config['cookie']['name'],
-#     config['cookie']['key'],
-#     config['cookie']['expiry_days'],
-#     config['preauthorized']
-# )
-
-# authenticator.login()
-
-# if st.session_state["authentication_status"]:
-#     authenticator.logout()
-#     st.write(f'Welcome *{st.session_state["name"]}*')
-#     st.title('Some content')
-# elif st.session_state["authentication_status"] is False:
-#     st.error('Username/password is incorrect')
-# elif st.session_state["authentication_status"] is None:
-#     st.warning('Please enter your username and password')
-
-
-# ________________
-
+# Initialisation du thème (global pour toute l'application)
 def ChangeTheme():
     previous_theme = ms.themes["current_theme"]
     tdict = ms.themes["light"] if ms.themes["current_theme"] == "light" else ms.themes["dark"]
@@ -95,12 +58,28 @@ if "themes" not in ms:
     ChangeTheme()
     ms.theme_initialized = True  # pour éviter de répéter l'initialisation
 
-btn_face = ms.themes["light"]["button_face"] if ms.themes["current_theme"] == "light" else ms.themes["dark"]["button_face"]
-
 if ms.themes["refreshed"] == False:
   ms.themes["refreshed"] = True
   st.rerun()
 
-st.divider()
-st.button(btn_face, on_click=ChangeTheme)
-# _______________________
+# ______________________________________________________________________________________________________________________
+# Configuration de la navigation
+pages = {
+    "": [
+        st.Page("app_pages/home.py", title="Welcome", icon="👋", default=True),
+    ],
+    "Slide-Rule Application": [
+        st.Page("app_pages/02_1️⃣_Number_of_fissions.py", title="Number of fissions", icon="1️⃣"),
+        st.Page("app_pages/03_2️⃣_Dose.py", title="Dose", icon="2️⃣"),
+    ],
+    "Resources": [
+        st.Page("app_pages/04_📄_Documentation.py", title="Documentation", icon="📄"),
+    ],
+    "Advanced use": [
+        st.Page("app_pages/01_0️⃣_Raw_results.py", title="Raw results", icon="0️⃣"),
+    ],
+}
+
+pg = st.navigation(pages, expanded=True)
+pg.run()
+# ______________________________________________________________________________________________________________________
