@@ -15,11 +15,36 @@ def load_data(sheet_name):
 
 fissions_number_input = 1E17
 
-selected_data = st.sidebar.selectbox("Select the data to load", ("Shielded configurations", "Sensitivity studies", "Delayed fission gamma"))
+selected_data = st.sidebar.selectbox("Select the data to load", ("Shielded configurations", "Bare configurations", "Sensitivity studies", "Delayed fission gamma"), index=0)
 match selected_data:
     case "Delayed fission gamma":
         st.warning('Data not implemented yet. Coming soon...')
         st.stop()
+    case "Bare configurations":
+        data = load_data('bare')
+        # Valeurs par défaut pour bare configurations
+        visu_series_default_columns = ['Fissile', 'Case', 'Code', 'Particle']
+        visu_series_default_values = {
+            "Fissile": ["U"],
+            "Case": "__all__",
+            "Code": ["MCNP 6.1"],
+            "Particle": ["N"]
+        }
+        compare_series_default_columns = visu_series_default_columns
+        compare_series_default_values = {
+            "Fissile": ["U"],
+            "Case": ["C1 [U(4.95)O2F2 (H/235U = 410)]"],
+            "Code": ["SCALE 6.2", "COG 11.2"],
+            "Particle": ["N"]
+        }
+        reference_case_default_columns = ['Fissile', 'Case', 'Code', 'Particle']
+        reference_case_default_values = {
+            "Fissile": "U",
+            "Case": "C1 [U(4.95)O2F2 (H/235U = 410)]",
+            "Code": "MCNP 6.1",
+            "Particle": "N"
+        }
+        my_columns_to_group_by = ['Fissile', 'Case', 'Library', 'Flux-to-dose conversion factor', 'Particle', 'Distance (m)']
     case "Shielded configurations":
         selection = st.sidebar.pills("Please choose one", ["Wall", "Wall position"], selection_mode="single", default = "Wall", key="shielded_configurations")
         match selection:
@@ -34,8 +59,12 @@ match selected_data:
                 # Valeurs par défaut
                 visu_series_default_columns = ['Fissile', 'Case', 'Code', 'Particle', 'Screen', 'Thickness (cm)']
                 visu_series_default_values = {
+                    "Fissile": ["U"],
+                    "Case": ["C1 [U(4.95)O2F2 (H/235U = 410)]"],
+                    "Code": ["MCNP 6.1"],
+                    "Particle": ["N"],
                     "Screen": ["None", "Concrete"], 
-                    "Thickness (cm)": "__all__",  
+                    "Thickness (cm)": "__all__"
                 }
                 compare_series_default_columns = visu_series_default_columns
                 compare_series_default_values = {
