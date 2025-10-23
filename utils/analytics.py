@@ -10,8 +10,8 @@ def inject_google_analytics(ga_id):
         ga_id (str): Votre ID Google Analytics (format: G-XXXXXXXXXX)
     """
     
+    # Utiliser st.html() pour injecter dans le DOM principal
     ga_code = f"""
-    <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id={ga_id}"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -21,8 +21,8 @@ def inject_google_analytics(ga_id):
     </script>
     """
     
-    # Injecter le code dans le header
-    components.html(ga_code, height=0)
+    # Injecter le code directement dans la page (pas dans un iframe)
+    st.html(ga_code)
 
 
 def track_page_view(page_name):
