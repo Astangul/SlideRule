@@ -25,24 +25,24 @@ match selected_data:
         # Valeurs par défaut pour bare configurations
         visu_series_default_columns = ['Fissile', 'Case', 'Code', 'Particle']
         visu_series_default_values = {
-            "Fissile": ["U"],
+            "Fissile": "__first__",  
             "Case": "__all__",
-            "Code": ["MCNP 6.1"],
-            "Particle": ["N"]
+            "Code": "__first__",     
+            "Particle": "__first__"  
         }
         compare_series_default_columns = visu_series_default_columns
         compare_series_default_values = {
-            "Fissile": ["U"],
-            "Case": ["C1 [U(4.95)O2F2 (H/235U = 410)]"],
-            "Code": ["SCALE 6.2", "COG 11.2"],
-            "Particle": ["N"]
+            "Fissile": "__first__",
+            "Case": "__first__",     
+            "Code": "__all__",
+            "Particle": "__first__"
         }
         reference_case_default_columns = ['Fissile', 'Case', 'Code', 'Particle']
         reference_case_default_values = {
-            "Fissile": "U",
-            "Case": "C1 [U(4.95)O2F2 (H/235U = 410)]",
-            "Code": "MCNP 6.1",
-            "Particle": "N"
+            "Fissile": "__first__",
+            "Case": "__first__",
+            "Code": "__first__",
+            "Particle": "__first__"
         }
         my_columns_to_group_by = ['Fissile', 'Case', 'Library', 'Flux-to-dose conversion factor', 'Particle', 'Distance (m)']
     case "Shielded configurations":
@@ -59,21 +59,30 @@ match selected_data:
                 # Valeurs par défaut
                 visu_series_default_columns = ['Fissile', 'Case', 'Code', 'Particle', 'Screen', 'Thickness (cm)']
                 visu_series_default_values = {
-                    "Fissile": ["U"],
-                    "Case": ["C1 [U(4.95)O2F2 (H/235U = 410)]"],
-                    "Code": ["MCNP 6.1"],
-                    "Particle": ["N"],
+                    "Fissile": "__first__",  
+                    "Case": "__first__",
+                    "Code": "__first__",
+                    "Particle": "__first__",  # Sélectionne automatiquement la première particule
                     "Screen": ["None", "Concrete"], 
                     "Thickness (cm)": "__all__"
                 }
                 compare_series_default_columns = visu_series_default_columns
                 compare_series_default_values = {
-                    "Screen": ["None"],  
-                    "Code": "__all__",  
+                    "Fissile": "__first__",  
+                    "Case": "__first__",
+                    "Code": "__all__",
+                    "Particle": "__first__",
+                    "Screen": ["Concrete"],
+                    "Thickness (cm)": "__first__",
                 }
                 reference_case_default_columns = ['Fissile', 'Case', 'Code', 'Particle', 'Screen', 'Thickness (cm)']
                 reference_case_default_values = {
-                    "Screen": "None"
+                    "Fissile": "__first__",  
+                    "Case": "__first__",
+                    "Code": "__first__",
+                    "Particle": "__first__",
+                    "Screen": ["Concrete"],
+                    "Thickness (cm)": "__first__"
                 }
                 my_columns_to_group_by = ['Fissile', 'Case', 'Library', 'Flux-to-dose conversion factor', 'Screen', 'Thickness (cm)', 'Particle', 'Distance (m)']
     case "Sensitivity studies":

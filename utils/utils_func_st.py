@@ -153,18 +153,20 @@ def df_multiselect_filters(
     df: pd.DataFrame,
     default_columns: list = None,
     key: str = "default",
-    default_values: dict = None  # Dictionnaire pour les valeurs par défaut, avec le mot-clé "__all__"
+    default_values: dict = None  # Dictionnaire pour les valeurs par défaut, avec les mots-clés "__all__" et "__first__"
 ) -> (pd.DataFrame, dict):
     """
     Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display,
     default values for specific columns, and a unique key for widget differentiation.
-    Supports a special keyword "__all__" in default_values to select all unique values for a column.
+    Supports special keywords in default_values:
+    - "__all__": select all unique values for a column
+    - "__first__": select only the first unique value for a column
 
     Args:
         df (pd.DataFrame): Original dataframe
         default_columns (list, optional): List of column names to display by default.
         key (str, optional): Base key for generating unique widget keys.
-        default_values (dict, optional): Dictionary of default filter values for specific columns, with "__all__" support.
+        default_values (dict, optional): Dictionary of default filter values for specific columns, with "__all__" and "__first__" support.
 
     Returns:
         pd.DataFrame: Filtered dataframe
@@ -191,11 +193,13 @@ def df_multiselect_filters(
             unique_key = f"{column}_{key}"  # Clé unique pour chaque widget
             column_defaults = default_values.get(column, None)  # Récupère les valeurs par défaut pour cette colonne
 
-            if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
+            if is_categorical_dtype(df[column]) or df[column].nunique() < 50:
                 options = df[column].unique().tolist()
-                # Si "__all__" est spécifié, utiliser toutes les valeurs uniques comme valeurs par défaut
+                # Si "__all__" est spécifié, utiliser toutes les valeurs uniques
+                # Si "__first__" est spécifié, utiliser seulement la première valeur
                 valid_defaults = (
                     options if column_defaults == "__all__" else
+                    [options[0]] if column_defaults == "__first__" and options else
                     [val for val in column_defaults if val in options] if column_defaults else
                     [options[0]] if options else []
                 )
@@ -343,17 +347,18 @@ def df_selectbox_filters(
     df: pd.DataFrame,
     default_columns: list = None,
     key: str = "default",
-    default_values: dict = None  # Dictionnaire pour les valeurs par défaut
+    default_values: dict = None  # Dictionnaire pour les valeurs par défaut, avec support de "__first__"
 ) -> (pd.DataFrame, dict):
     """
     Adds a UI on top of a dataframe to let viewers filter columns with an option to specify default columns to display,
     default values for specific columns, and a unique key for widget differentiation.
+    Supports special keyword "__first__" in default_values to select the first unique value for a column.
 
     Args:
         df (pd.DataFrame): Original dataframe
         default_columns (list, optional): List of column names to display by default.
         key (str, optional): Base key for generating unique widget keys.
-        default_values (dict, optional): Dictionary of default filter values for specific columns.
+        default_values (dict, optional): Dictionary of default filter values for specific columns, with "__first__" support.
 
     Returns:
         pd.DataFrame: Filtered dataframe
@@ -395,17 +400,21 @@ def df_selectbox_filters(
 
             if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
                 options = df[column].unique().tolist()
+                # Si "__first__" est spécifié, utiliser la première valeur
                 default_value = (
-                    column_defaults if column_defaults in options else options[0]
+                    options[0] if column_defaults == "__first__" and options else
+                    column_defaults if column_defaults in options else 
+                    options[0] if options else None
                 )  # Vérifie si la valeur par défaut est valide
-                user_cat_input = right.selectbox(
-                    label=f"Values for {column}",
-                    options=options,
-                    index=options.index(default_value),
-                    key=f"cat_{unique_key}"
-                )
-                filters[column] = [user_cat_input]
-                df = df[df[column].isin([user_cat_input])]
+                if default_value is not None:
+                    user_cat_input = right.selectbox(
+                        label=f"Values for {column}",
+                        options=options,
+                        index=options.index(default_value),
+                        key=f"cat_{unique_key}"
+                    )
+                    filters[column] = [user_cat_input]
+                    df = df[df[column].isin([user_cat_input])]
             elif is_numeric_dtype(df[column]):
                 _min, _max = float(df[column].min()), float(df[column].max())
                 step = (_max - _min) / 100
