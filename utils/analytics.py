@@ -10,19 +10,37 @@ def inject_google_analytics(ga_id):
         ga_id (str): Votre ID Google Analytics (format: G-XXXXXXXXXX)
     """
     
-    # Utiliser st.html() pour injecter dans le DOM principal
-    ga_code = f"""
-    <script async src="https://www.googletagmanager.com/gtag/js?id={ga_id}"></script>
+    # Code Google Analytics avec propagation au document parent
+    ga_html = f"""
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){{dataLayer.push(arguments);}}
-      gtag('js', new Date());
-      gtag('config', '{ga_id}');
+        // Créer le script gtag.js dans le document parent (page principale)
+        (function() {{
+            // Vérifier si déjà chargé
+            if (window.parent.gtag) {{
+                return;
+            }}
+            
+            // Créer et injecter le script gtag.js dans le parent
+            var script = window.parent.document.createElement('script');
+            script.async = true;
+            script.src = 'https://www.googletagmanager.com/gtag/js?id={ga_id}';
+            window.parent.document.head.appendChild(script);
+            
+            // Initialiser dataLayer dans le parent
+            window.parent.dataLayer = window.parent.dataLayer || [];
+            function gtag(){{window.parent.dataLayer.push(arguments);}}
+            window.parent.gtag = gtag;
+            
+            gtag('js', new Date());
+            gtag('config', '{ga_id}');
+            
+            console.log('Google Analytics chargé: {ga_id}');
+        }})();
     </script>
     """
     
-    # Injecter le code directement dans la page (pas dans un iframe)
-    st.html(ga_code)
+    # Injecter dans un iframe invisible qui modifie le parent
+    components.html(ga_html, height=0)
 
 
 def track_page_view(page_name):

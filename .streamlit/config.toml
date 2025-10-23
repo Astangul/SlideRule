@@ -1,0 +1,7 @@
+[server]
+# Protection XSRF activée par défaut
+enableXsrfProtection = true
+
+[browser]
+# Collecter les statistiques d'utilisation
+gatherUsageStats = true
