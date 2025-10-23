@@ -3,6 +3,7 @@ import streamlit_authenticator as stauth
 # from openpyxl import load_workbook
 import yaml
 from yaml.loader import SafeLoader
+from utils.analytics import inject_google_analytics
 
 # ______________________________________________________________________________________________________________________
 # Configuration de la page Streamlit
@@ -20,6 +21,15 @@ st.set_page_config(
 sidebar_logo_path = "./icons/Slide-Rule_orange.png"
 main_body_logo_path = "./icons/Slide-Rule_DallE-1.png"
 st.logo(image = sidebar_logo_path, size="large", icon_image = sidebar_logo_path)
+
+# ______________________________________________________________________________________________________________________
+# Google Analytics - Injection du code de tracking
+try:
+    ga_id = st.secrets["analytics"]["google_analytics_id"]
+    inject_google_analytics(ga_id)
+except Exception:
+    # Pas d'analytics configuré (normal en développement local)
+    pass
 
 # ______________________________________________________________________________________________________________________
 # Initialisation du thème (global pour toute l'application)
