@@ -6,8 +6,6 @@ from scipy.interpolate import interp1d
 from utils.plot_func_st import dose_scatter_plot_3, hex_to_rgba, hex_to_complementary_rgba
 
 # ______________________________________________________________________________________________________________________
-st.warning('Section in development (WIP)')
-# ______________________________________________________________________________________________________________________
 # Récupérer le thème courant depuis le session_state
 if "themes" in st.session_state:
     current_theme = st.session_state.themes["current_theme"]
@@ -570,7 +568,7 @@ with tab1:
 
     fig.layout.update(hovermode="x")  # ✅ Mode de survol unifié
     # 🔹 Affichage du graphique mis à jour avec les points de doses calculés
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     st.toggle("X-axis log scale", value=st.session_state.get("log_x_fig1", True), key="log_x_fig1")
     st.toggle("Y-axis log scale", value=st.session_state.get("log_y_fig1", True), key="log_y_fig1")
     

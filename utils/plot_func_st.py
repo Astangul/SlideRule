@@ -112,7 +112,7 @@ def dose_scatter_plot(ref_data, ref_label, compare_data, colors):
     else:
         fig1.update_yaxes(type='linear', title="Dose (Gy) ± 2σ", tickformat='.2e')
 
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width='stretch')
 
 def dose_ratio_scatter_plot(compare_data, ref_data, colors):
     fig2 = go.Figure()
@@ -191,7 +191,7 @@ def dose_ratio_scatter_plot(compare_data, ref_data, colors):
     else:
         fig2.update_xaxes(type='linear', title="Distance (m)")
 
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
 
 def dose_ratio_bar_chart(compare_data, ref_data, colors):
     title = "Dose Ratio"
@@ -262,7 +262,7 @@ def dose_ratio_bar_chart(compare_data, ref_data, colors):
         barmode='group'  # Group the bars by unique_key
     )
 
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
 
 def dose_scatter_plot_2(data, filters, colors, sigma_multiplier=2.0):
     log_x = st.toggle("X-axis log scale", value=True, key="log_x_fig1")
@@ -314,7 +314,7 @@ def dose_scatter_plot_2(data, filters, colors, sigma_multiplier=2.0):
     else:
         fig1.update_yaxes(type='linear', title=f"Dose (Gy) ± {int(sigma_multiplier)}σ", tickformat='.2e')
 
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width='stretch')
 
 def dose_scatter_plot_3(data, filters, colors):
     """

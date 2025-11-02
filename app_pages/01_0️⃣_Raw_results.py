@@ -315,7 +315,7 @@ with tab2:
             global_fig.update_xaxes(type='linear', title="Distance (m)")
     
     # Afficher la figure globale avec toutes les séries dans un seul graphique
-    st.plotly_chart(global_fig, use_container_width=True)
+    st.plotly_chart(global_fig, width='stretch')
 
 with tab3:
     @st.cache_data

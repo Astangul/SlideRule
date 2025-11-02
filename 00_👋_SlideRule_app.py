@@ -86,7 +86,8 @@ pages = {
         st.Page("app_pages/04_📄_Documentation.py", title="Documentation", icon="📄"),
     ],
     "Advanced use": [
-        st.Page("app_pages/01_0️⃣_Raw_results.py", title="Raw results", icon="0️⃣"),
+        st.Page("app_pages/01_0️⃣_Raw_results.py", title="Raw results", icon="🔢"),
+        st.Page("app_pages/05_📊_Model_Fitting.py", title="Model Fitting", icon="📈"),
     ],
 }
 

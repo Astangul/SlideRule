@@ -30,7 +30,7 @@ with col1:
             file_name="ASNR_2025-00084_EN_SlideRule_report_final.pdf",
             mime="application/pdf",
             help="Click to download the main report",
-            use_container_width=True
+            width='stretch'
         )
         
         # Affichage du PDF
@@ -60,7 +60,7 @@ with col2:
             file_name="Tasks_specifications.pdf",
             mime="application/pdf",
             help="Click to download the task specifications",
-            use_container_width=True
+            width='stretch'
         )
         
         # Affichage du PDF
