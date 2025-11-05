@@ -163,15 +163,15 @@ def fit_super_hybrid(r_data, T_data, D_data):
     
     def log_model(vars, A, k0, k1, mu_air, mu_pb, b1, b2, eps, lambda_r):
         r, T = vars
-        k_eff = k0 + k1*T
-        k_eff = np.clip(k_eff, 0.5, 3)
+        k = k0 + k1*T
+        k = np.clip(k, 0.5, 3)
         
         buildup = 1 + b1*T + b2*T**2
         buildup = np.maximum(buildup, 0.1)
         
         correction = 1 + eps * np.exp(-r/lambda_r)
         
-        return (np.log10(A) - k_eff*np.log10(r) + np.log10(buildup)
+        return (np.log10(A) - k*np.log10(r) + np.log10(buildup)
                 - mu_air*r*np.log10(np.e) - mu_pb*T*np.log10(np.e) + np.log10(np.abs(correction)))
     
     try:
@@ -206,10 +206,10 @@ def predict_super_hybrid(params, r, T):
         Predicted dose in Gy
     """
     A, k0, k1, mu_air, mu_pb, b1, b2, eps, lambda_r = params
-    k_eff = np.clip(k0 + k1*T, 0.5, 3)
+    k = np.clip(k0 + k1*T, 0.5, 3)
     buildup = np.maximum(1 + b1*T + b2*T**2, 0.1)
     correction = 1 + eps * np.exp(-r/lambda_r)
-    return A * r**(-k_eff) * np.exp(-mu_air*r) * buildup * np.exp(-mu_pb*T) * correction
+    return A * r**(-k) * np.exp(-mu_air*r) * buildup * np.exp(-mu_pb*T) * correction
 
 # ______________________________________________________________________________________________________________________
 # Hybrid Corrected model function
@@ -346,7 +346,7 @@ default_values = {
     "Case": "__first__",
     "Code": "__first__",
     "Particle": "__first__",
-    "Screen": ["Concrete"],
+    "Screen": ["None", "Concrete"],
     "Thickness (cm)": "__all__"
 }
 
@@ -473,12 +473,12 @@ with st.expander(f"ℹ️ About the {selected_model} Model", expanded=False):
         
         The **Super Hybrid** model combines variable exponent, polynomial build-up and exponential correction:
         
-        $$D(r, T) = A \cdot r^{-k_{\text{eff}}} \cdot e^{-\mu_{\text{air}} \cdot r} \cdot B_{\text{screen}}(T) \cdot e^{-\mu_{\text{screen}} \cdot T} \cdot C(r)$$
+        $$D(r, T) = A \cdot r^{-k} \cdot e^{-\mu_{\text{air}} \cdot r} \cdot B_{\text{screen}}(T) \cdot e^{-\mu_{\text{screen}} \cdot T} \cdot C(r)$$
         
         where:
         
         **Variable geometric exponent**:
-        $$k_{\text{eff}} = k_0 + k_1 \cdot T$$
+        $$k = k_0 + k_1 \cdot T$$
         (constrained to [0.5, 3])
         
         **Polynomial build-up factor**:
