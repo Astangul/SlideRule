@@ -52,7 +52,7 @@ def fit_skyshine_enhanced(r_data, T_data, D_data):
     if len(D_data) == 0:
         return None, None, None, None, None, None, None, None, None, 0, [0]*9
     
-    log10_D = np.log10(D_data)
+    ln_D = np.log(D_data)
     
     A_init = 1.0
     B_init = 0.1
@@ -75,10 +75,10 @@ def fit_skyshine_enhanced(r_data, T_data, D_data):
         D_skyshine = (B * r**(-n_sky) * np.exp(-mu_sky*r) * np.exp(-mu_pb*T/f_atten))
         
         D_total = D_direct + D_skyshine
-        return np.log10(np.maximum(D_total, 1e-100))
+        return np.log(np.maximum(D_total, 1e-100))
     
     try:
-        popt, pcov = curve_fit(log_model, (r_data, T_data), log10_D,
+        popt, pcov = curve_fit(log_model, (r_data, T_data), ln_D,
                               p0=initial_guess, maxfev=100000,
                               bounds=([0, 0, 0, 0, 0, 0.5, -1, -0.5, 1], 
                                      [10, 1, 0.1, 0.05, 1, 2, 1, 0.5, 10]))
@@ -86,9 +86,9 @@ def fit_skyshine_enhanced(r_data, T_data, D_data):
         A, B, mu_air, mu_sky, mu_pb, n_sky, c1, c2, f_atten = popt
         perr = np.sqrt(np.diag(pcov))
         
-        log10_D_fit = log_model((r_data, T_data), *popt)
-        ss_res = np.sum((log10_D - log10_D_fit)**2)
-        ss_tot = np.sum((log10_D - np.mean(log10_D))**2)
+        ln_D_fit = log_model((r_data, T_data), *popt)
+        ss_res = np.sum((ln_D - ln_D_fit)**2)
+        ss_tot = np.sum((ln_D - np.mean(ln_D))**2)
         R2 = 1 - ss_res/ss_tot
         
         return A, B, mu_air, mu_sky, mu_pb, n_sky, c1, c2, f_atten, R2, list(perr)
@@ -142,15 +142,15 @@ def fit_super_hybrid(r_data, T_data, D_data):
     if len(D_data) == 0:
         return None, None, None, None, None, None, None, None, None, 0, [0]*9
     
-    log10_D = np.log10(D_data)
+    ln_D = np.log(D_data)
     ln_r = np.log(r_data)
     
     # Initial estimate using linear regression
-    Y = log10_D + 2*np.log10(r_data)
+    Y = ln_D + 2*ln_r
     X = np.column_stack([np.ones_like(r_data), r_data, T_data, r_data*T_data])
     Beta, _, _, _ = np.linalg.lstsq(X, Y, rcond=None)
     
-    A_init = 10**Beta[0]
+    A_init = np.exp(Beta[0])
     mu_air_init = max(0.001, -Beta[1])
     mu_pb_init = max(0.01, -Beta[2])
     
@@ -171,11 +171,11 @@ def fit_super_hybrid(r_data, T_data, D_data):
         
         correction = 1 + eps * np.exp(-r/lambda_r)
         
-        return (np.log10(A) - k*np.log10(r) + np.log10(buildup)
-                - mu_air*r*np.log10(np.e) - mu_pb*T*np.log10(np.e) + np.log10(np.abs(correction)))
+        return (np.log(A) - k*np.log(r) + np.log(buildup)
+                - mu_air*r - mu_pb*T + np.log(np.abs(correction)))
     
     try:
-        popt, pcov = curve_fit(log_model, (r_data, T_data), log10_D,
+        popt, pcov = curve_fit(log_model, (r_data, T_data), ln_D,
                               p0=initial_guess, maxfev=100000,
                               bounds=([0, 0.5, -0.1, 0, 0, -2, -0.5, -5, 10], 
                                      [np.inf, 3, 0.1, 0.5, 1, 2, 0.5, 5, 2000]))
@@ -183,9 +183,9 @@ def fit_super_hybrid(r_data, T_data, D_data):
         A, k0, k1, mu_air, mu_pb, b1, b2, eps, lambda_r = popt
         perr = np.sqrt(np.diag(pcov))
         
-        log10_D_fit = log_model((r_data, T_data), *popt)
-        ss_res = np.sum((log10_D - log10_D_fit)**2)
-        ss_tot = np.sum((log10_D - np.mean(log10_D))**2)
+        ln_D_fit = log_model((r_data, T_data), *popt)
+        ss_res = np.sum((ln_D - ln_D_fit)**2)
+        ss_tot = np.sum((ln_D - np.mean(ln_D))**2)
         R2 = 1 - ss_res/ss_tot
         
         return A, k0, k1, mu_air, mu_pb, b1, b2, eps, lambda_r, R2, list(perr)
@@ -238,15 +238,15 @@ def fit_hybrid_corrected(r_data, T_data, D_data):
     if len(D_data) == 0:
         return None, None, None, None, None, None, None, None, 0, [0]*8
     
-    log10_D = np.log10(D_data)
+    ln_D = np.log(D_data)
     ln_r = np.log(r_data)
     
     # Initial estimate using linear regression
-    Y = log10_D + 2*np.log10(r_data)
+    Y = ln_D + 2*ln_r
     X = np.column_stack([np.ones_like(r_data), r_data, T_data, T_data**2])
     Beta, _, _, _ = np.linalg.lstsq(X, Y, rcond=None)
     
-    A_init = 10**Beta[0]
+    A_init = np.exp(Beta[0])
     mu_air_init = max(0.001, -Beta[1])
     mu_pb_init = max(0.01, -Beta[2])
     
@@ -258,11 +258,11 @@ def fit_hybrid_corrected(r_data, T_data, D_data):
         buildup = np.maximum(buildup, 0.1)
         correction = 1 + epsilon * np.exp(-r/lambda_r)
         
-        return (np.log10(A) - k*np.log10(r) + np.log10(buildup) 
-                - mu_air*r*np.log10(np.e) - mu_pb*T*np.log10(np.e) + np.log10(correction))
+        return (np.log(A) - k*np.log(r) + np.log(buildup) 
+                - mu_air*r - mu_pb*T + np.log(correction))
     
     try:
-        popt, pcov = curve_fit(log_model, (r_data, T_data), log10_D,
+        popt, pcov = curve_fit(log_model, (r_data, T_data), ln_D,
                               p0=initial_guess, maxfev=50000,
                               bounds=([0, 0.5, 0, 0, -2, -0.5, -1, 1], 
                                      [np.inf, 3, 1, 1, 2, 0.5, 1, 1000]))
@@ -270,9 +270,9 @@ def fit_hybrid_corrected(r_data, T_data, D_data):
         A, k, mu_air, mu_pb, c1, c2, eps, lambda_r = popt
         perr = np.sqrt(np.diag(pcov))
         
-        log10_D_fit = log_model((r_data, T_data), *popt)
-        ss_res = np.sum((log10_D - log10_D_fit)**2)
-        ss_tot = np.sum((log10_D - np.mean(log10_D))**2)
+        ln_D_fit = log_model((r_data, T_data), *popt)
+        ss_res = np.sum((ln_D - ln_D_fit)**2)
+        ss_tot = np.sum((ln_D - np.mean(ln_D))**2)
         R2 = 1 - ss_res/ss_tot
         
         return A, k, mu_air, mu_pb, c1, c2, eps, lambda_r, R2, list(perr)
@@ -601,7 +601,7 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Logarithmic R² (log₁₀)", f"{R2:.6f}")
+            st.metric("Logarithmic R² (ln)", f"{R2:.6f}")
         with col2:
             # Calculate median relative error using the appropriate prediction function
             if selected_model == "Skyshine Enhanced":
@@ -635,7 +635,7 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
         st.info("""
         💡 **About the metrics:**
         
-        **Logarithmic R² (log₁₀)**: For data spanning multiple orders of magnitude (10⁻⁷ to 10⁰ Gy), the logarithmic R² is essential. It gives equal weight to each decade, providing a more accurate assessment of model quality across the entire dose range than a linear R².
+        **Logarithmic R² (ln)**: For data spanning multiple orders of magnitude (10⁻⁷ to 10⁰ Gy), the logarithmic R² is essential. It gives equal weight to each decade, providing a more accurate assessment of model quality across the entire dose range than a linear R². The natural logarithm (ln) is used as it is standard in physics and mathematical modeling.
         
         **Median Relative Error**: Represents the typical prediction error of the model, calculated as the median of |( D_measured - D_predicted ) / D_measured| × 100%. This metric is robust to outliers and gives a realistic view of model performance. Values < 10% indicate excellent predictions, < 20% good predictions, and > 50% suggest the model may not be suitable for this configuration.
         """)
@@ -764,7 +764,7 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
         ))
     
     # Layout
-    title_text = f"{selected_model} Model Fit (R² log₁₀ = {R2:.6f})"
+    title_text = f"{selected_model} Model Fit (R² ln = {R2:.6f})"
     if show_custom:
         title_text += f" + Prediction for T={custom_thickness} cm"
     
