@@ -298,6 +298,84 @@ def predict_hybrid_corrected(params, r, T):
     return A * r**(-k) * np.exp(-mu_air*r) * buildup * np.exp(-mu_pb*T) * correction
 
 # ______________________________________________________________________________________________________________________
+# Simple Exponential model function
+
+def fit_simple_exponential(r_data, T_data, D_data):
+    """
+    Simple exponential model with geometric and exponential attenuation
+    
+    Parameters (4):
+    - A: Amplitude
+    - k: Geometric exponent
+    - b: Attenuation coefficient in air (m⁻¹)
+    - c: Attenuation coefficient in shield (cm⁻¹)
+    
+    Model: D(r,T) = A × r^(-k) × exp(-b×r) × exp(-c×T)
+    """
+    r_data = np.array(r_data, dtype=float)
+    T_data = np.array(T_data, dtype=float)
+    D_data = np.array(D_data, dtype=float)
+    
+    valid = (~np.isnan(D_data)) & (D_data > 0) & (r_data > 0)
+    r_data, T_data, D_data = r_data[valid], T_data[valid], D_data[valid]
+    
+    if len(D_data) == 0:
+        return None, None, None, None, 0, [0]*4
+    
+    ln_D = np.log(D_data)
+    ln_r = np.log(r_data)
+    
+    # Initial estimate using linear regression
+    Y = ln_D + 2*ln_r
+    X = np.column_stack([np.ones_like(r_data), r_data, T_data])
+    Beta, _, _, _ = np.linalg.lstsq(X, Y, rcond=None)
+    
+    A_init = np.exp(Beta[0])
+    b_init = max(0.001, -Beta[1])
+    c_init = max(0.01, -Beta[2])
+    k_init = 2.0
+    
+    initial_guess = [A_init, k_init, b_init, c_init]
+    
+    def log_model(vars, A, k, b, c):
+        r, T = vars
+        return np.log(A) - k*np.log(r) - b*r - c*T
+    
+    try:
+        popt, pcov = curve_fit(log_model, (r_data, T_data), ln_D,
+                              p0=initial_guess, maxfev=50000,
+                              bounds=([0, 0.5, 0, 0], 
+                                     [np.inf, 3, 1, 1]))
+        
+        A, k, b, c = popt
+        perr = np.sqrt(np.diag(pcov))
+        
+        ln_D_fit = log_model((r_data, T_data), *popt)
+        ss_res = np.sum((ln_D - ln_D_fit)**2)
+        ss_tot = np.sum((ln_D - np.mean(ln_D))**2)
+        R2 = 1 - ss_res/ss_tot
+        
+        return A, k, b, c, R2, list(perr)
+    except Exception as e:
+        st.error(f"Model fitting error: {e}")
+        return None, None, None, None, 0, [0]*4
+
+def predict_simple_exponential(params, r, T):
+    """
+    Calculate the prediction of the Simple Exponential model
+    
+    Args:
+        params: Tuple of 4 parameters (A, k, b, c)
+        r: Distance(s) in meters
+        T: Shield thickness(es) in cm
+    
+    Returns:
+        Predicted dose in Gy
+    """
+    A, k, b, c = params
+    return A * r**(-k) * np.exp(-b*r) * np.exp(-c*T)
+
+# ______________________________________________________________________________________________________________________
 # User interface
 
 # Sidebar: Model selection
@@ -305,6 +383,13 @@ st.sidebar.header("⚙️ Model Selection")
 
 # Dictionary of available models
 AVAILABLE_MODELS = {
+    "Simple Exponential": {
+        "name": "Simple Exponential (4 parameters)",
+        "description": "Basic model with geometric and exponential attenuation (good for neutrons)",
+        "params_count": 4,
+        "icon": "",
+        "performance": "R² ≈ variable | Simple & fast"
+    },
     "Skyshine Enhanced": {
         "name": "Skyshine Enhanced (9 parameters)",
         "description": "Combines direct and skyshine components with polynomial build-up",
@@ -407,7 +492,9 @@ st.info(f"📌 **Current model**: {AVAILABLE_MODELS[selected_model]['icon']} {AV
 if st.button(f"🔄 Run {selected_model} Fitting", type="primary"):
     with st.spinner("Fitting in progress..."):
         # Route to the appropriate fitting function based on selected model
-        if selected_model == "Skyshine Enhanced":
+        if selected_model == "Simple Exponential":
+            result = fit_simple_exponential(r_fit, T_fit, D_fit)
+        elif selected_model == "Skyshine Enhanced":
             result = fit_skyshine_enhanced(r_fit, T_fit, D_fit)
         elif selected_model == "Super Hybrid":
             result = fit_super_hybrid(r_fit, T_fit, D_fit)
@@ -436,7 +523,35 @@ if st.button(f"🔄 Run {selected_model} Fitting", type="primary"):
 
 # Model-specific documentation
 with st.expander(f"ℹ️ About the {selected_model} Model", expanded=False):
-    if selected_model == "Skyshine Enhanced":
+    if selected_model == "Simple Exponential":
+        st.markdown(r"""
+        ## 📐 Model Equation
+        
+        The **Simple Exponential** model is a compact 4-parameter model particularly suited for **neutron dose** calculations:
+        
+        $$D(r, T) = A \cdot r^{-k} \cdot e^{-b \cdot r} \cdot e^{-c \cdot T}$$
+        
+        This model captures:
+        - **Geometric attenuation**: $r^{-k}$ with adjustable exponent $k$
+        - **Exponential attenuation in air**: $e^{-b \cdot r}$
+        - **Exponential attenuation in shield**: $e^{-c \cdot T}$
+        
+        ## 🔧 Model Parameters (4)
+        
+        | Parameter | Description | Unit | Typical Range |
+        |-----------|-------------|------|---------------|
+        | `A` | Amplitude (dose normalization) | - | > 0 |
+        | `k` | Geometric exponent | - | 0.5 - 3.0 |
+        | `b` | Attenuation coefficient in air | m⁻¹ | 0 - 1 |
+        | `c` | Attenuation coefficient in shield | cm⁻¹ | 0 - 1 |
+        
+        ## 💡 Use Cases
+        
+        - **Primary**: Neutron dose modeling (simplified physics)
+        - **Advantages**: Few parameters, fast fitting, good generalization
+        - **Limitations**: No build-up or skyshine effects
+        """)
+    elif selected_model == "Skyshine Enhanced":
         st.markdown(r"""
         ## 📐 Model Equation
         
@@ -542,7 +657,16 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
     # Model Parameters in expander
     with st.expander("📊 Fitted Model Parameters", expanded=True):
         # Define parameter information based on selected model
-        if selected_model == "Skyshine Enhanced":
+        if selected_model == "Simple Exponential":
+            param_names = ['A', 'k', 'b', 'c']
+            param_units = ['-', '-', 'm⁻¹', 'cm⁻¹']
+            param_descriptions = [
+                'Amplitude (dose normalization)',
+                'Geometric exponent',
+                'Attenuation coefficient in air',
+                'Attenuation coefficient in shield'
+            ]
+        elif selected_model == "Skyshine Enhanced":
             param_names = ['A', 'B', 'μ_air', 'μ_sky', 'μ_screen', 'n_sky', 'c₁', 'c₂', 'f_atten']
             param_units = ['-', '-', 'm⁻¹', 'm⁻¹', 'cm⁻¹', '-', 'cm⁻¹', 'cm⁻²', '-']
             param_descriptions = [
@@ -604,7 +728,9 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
             st.metric("Logarithmic R² (ln)", f"{R2:.6f}")
         with col2:
             # Calculate median relative error using the appropriate prediction function
-            if selected_model == "Skyshine Enhanced":
+            if selected_model == "Simple Exponential":
+                D_pred = predict_simple_exponential(params, r_fit, T_fit)
+            elif selected_model == "Skyshine Enhanced":
                 D_pred = predict_skyshine_enhanced(params, r_fit, T_fit)
             elif selected_model == "Super Hybrid":
                 D_pred = predict_super_hybrid(params, r_fit, T_fit)
@@ -716,7 +842,9 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
         r_model = np.logspace(np.log10(r_subset.min()), np.log10(r_subset.max()), 200)
         
         # Use appropriate prediction function based on selected model
-        if selected_model == "Skyshine Enhanced":
+        if selected_model == "Simple Exponential":
+            D_model = predict_simple_exponential(params, r_model, np.full_like(r_model, T_val))
+        elif selected_model == "Skyshine Enhanced":
             D_model = predict_skyshine_enhanced(params, r_model, np.full_like(r_model, T_val))
         elif selected_model == "Super Hybrid":
             D_model = predict_super_hybrid(params, r_model, np.full_like(r_model, T_val))
@@ -741,7 +869,9 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
         r_custom = np.logspace(np.log10(r_fit.min()), np.log10(r_fit.max()), 300)
         
         # Use appropriate prediction function based on selected model
-        if selected_model == "Skyshine Enhanced":
+        if selected_model == "Simple Exponential":
+            D_custom = predict_simple_exponential(params, r_custom, np.full_like(r_custom, custom_thickness))
+        elif selected_model == "Skyshine Enhanced":
             D_custom = predict_skyshine_enhanced(params, r_custom, np.full_like(r_custom, custom_thickness))
         elif selected_model == "Super Hybrid":
             D_custom = predict_super_hybrid(params, r_custom, np.full_like(r_custom, custom_thickness))
