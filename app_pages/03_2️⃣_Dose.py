@@ -22,7 +22,10 @@ total_fill_color_rgba = hex_to_complementary_rgba(hex_color, alpha=0.2)
 # Chargement des données avec mise en cache
 @st.cache_data
 def load_data(sheet_name):
-    return pd.read_excel("./Database/All-at-once_DB.xlsx", sheet_name=sheet_name)
+    df = pd.read_excel("./Database/All-at-once_DB.xlsx", sheet_name=sheet_name)
+    if "Dose" in df.columns and "Dose (Gy)" not in df.columns:
+        df = df.rename(columns={"Dose": "Dose (Gy)"})
+    return df
 
 data = load_data('final')
 

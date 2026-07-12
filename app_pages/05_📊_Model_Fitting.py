@@ -22,7 +22,10 @@ Select a model from the sidebar to begin.
 # Load data with caching
 @st.cache_data
 def load_data(sheet_name):
-    return pd.read_excel("./Database/All-at-once_DB.xlsx", sheet_name=sheet_name)
+    df = pd.read_excel("./Database/All-at-once_DB.xlsx", sheet_name=sheet_name)
+    if "Dose" in df.columns and "Dose (Gy)" not in df.columns:
+        df = df.rename(columns={"Dose": "Dose (Gy)"})
+    return df
 
 # ______________________________________________________________________________________________________________________
 # Skyshine Enhanced model function
