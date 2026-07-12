@@ -1,0 +1,55 @@
+# .dockerignore - Fichiers à exclure de l'image Docker
+
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE / historique
+.vscode/
+.devcontainer/
+.history/
+*.swp
+*.swo
+SR_app.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (ne jamais inclure dans l'image)
+.streamlit/secrets.toml
+
+# Documentation et fichiers de développement
+ANALYTICS_SETUP.md
+GUIDE_GOOGLE_ANALYTICS.md
+*.md
+!README.md
+
+# Docker files eux-mêmes
+Dockerfile
+docker-compose.yml
+.dockerignore
+.gitlab-ci.yml
+
+# Données de développement / recherche non nécessaires à l'exécution de l'app
+Notebooks/
+Datasets/
+Database/old/
+
+# Raccourcis Windows locaux
+**/*.lnk

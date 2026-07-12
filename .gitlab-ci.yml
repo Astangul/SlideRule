@@ -1,0 +1,22 @@
+variables:
+  REGISTRY_URL: "picocs.neutron.intra.irsn.fr"
+  IMAGE_NAME: "$REGISTRY_URL/snc/sliderule"
+  NO_PROXY: "docker,dind,localhost,.intra.irsn.fr"
+
+stages:
+  - build
+
+build-image:
+  stage: build
+  tags:
+    - shell
+  script:
+    - env|sort
+    - >
+      docker build
+      --build-arg http_proxy=$http_proxy
+      --build-arg https_proxy=$https_proxy
+      --tag $REGISTRY_URL/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+      .
+    - echo "Pushing image $REGISTRY_URL/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA to registry"
+    - docker push $REGISTRY_URL/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
