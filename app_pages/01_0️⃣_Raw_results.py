@@ -205,11 +205,13 @@ with tab1:
     st.write(f"Estimated prompt dose based on total fissions: {fissions_number_input:.1e}")
     
     # Contrôle des barres d'incertitude
+    # (pas de `value=` ici : "sigma_multiplier" est déjà initialisé en session_state
+    # ci-dessus ; le passer aussi déclenche l'avertissement "widget created with a
+    # default value but also had its value set via the Session State API")
     st.number_input(
         "Error bars (σ):",
         min_value=1,
         max_value=3,
-        value=2,
         step=1,
         key="sigma_multiplier",
         help="Adjust the uncertainty multiplier for error bars (1σ, 2σ, or 3σ)"

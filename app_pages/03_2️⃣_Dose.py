@@ -62,7 +62,7 @@ if f"{st.session_state.fission_input:.1e}" != st.session_state.fission_slider:
 # Widgets pour sélectionner le nombre de fissions
 # persist_state="session" (Streamlit >= 1.59) conserve la valeur du widget
 # pour toute la session, y compris lors des changements de page.
-selected_value = st.sidebar.select_slider(
+st.sidebar.select_slider(
     'Select the number of fissions:',
     options=options,
     key="fission_slider",
@@ -70,20 +70,19 @@ selected_value = st.sidebar.select_slider(
     persist_state="session"
 )
 
-# Convertir la valeur sélectionnée en float pour les calculs
-fissions_number_slider = float(selected_value)
-
 # **Calculer dynamiquement le pas**
 current_value = st.session_state.get('fission_input', 1e17)
 exponent = np.floor(np.log10(current_value))
 step = (10 ** exponent) * 0.1
 
 # Créer un number_input pour permettre à l'utilisateur d'entrer manuellement la valeur
+# (pas de `value=` ici : la clé "fission_input" a déjà une valeur en session_state,
+# lui passer aussi `value=` déclenche l'avertissement "widget created with a default
+# value but also had its value set via the Session State API")
 fissions_number_input = st.sidebar.number_input(
     "OR enter the number of fissions",
     min_value=1.0e+13,
     max_value=9.9e+23,
-    value=fissions_number_slider,
     step=step,
     format="%.1e",
     key="fission_input",
