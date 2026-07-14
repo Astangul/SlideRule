@@ -38,21 +38,15 @@ for exponent in range(13, 21):  # For 1.0E13 to 1.0E20
 # Conversion des valeurs en chaînes de caractères pour l'affichage
 options = [f"{v:.1e}" for v in values]
 
-# Valeur persistante du nombre de fissions, indépendante des clés de widgets.
-# Streamlit efface les clés de session_state d'un widget qui n'est pas
-# recréé lors d'un run (ex: navigation vers une autre page), donc
-# 'fission_slider'/'fission_input' seuls ne survivent pas à un changement
-# de page. 'fission_count' n'est jamais une clé de widget : elle persiste
-# et sert à réinitialiser les widgets avec la dernière valeur choisie.
-if 'fission_count' not in st.session_state:
-    st.session_state['fission_count'] = 1e17
+# S'assurer que la valeur par défaut est formatée de la même manière que les options
+default_value = f"{1e17:.1e}"
 
-# Initialisation de l'état de la session pour les widgets
+# Initialisation de l'état de la session
 if 'fission_slider' not in st.session_state:
-    st.session_state['fission_slider'] = f"{st.session_state.fission_count:.1e}"
+    st.session_state['fission_slider'] = default_value
 
 if 'fission_input' not in st.session_state:
-    st.session_state['fission_input'] = st.session_state.fission_count
+    st.session_state['fission_input'] = 1e17
 
 # Callbacks pour synchroniser les valeurs
 def update_fission_slider():
@@ -66,11 +60,14 @@ if f"{st.session_state.fission_input:.1e}" != st.session_state.fission_slider:
     st.session_state.fission_slider = f"{st.session_state.fission_input:.1e}"
 
 # Widgets pour sélectionner le nombre de fissions
+# persist_state="session" (Streamlit >= 1.59) conserve la valeur du widget
+# pour toute la session, y compris lors des changements de page.
 selected_value = st.sidebar.select_slider(
     'Select the number of fissions:',
     options=options,
     key="fission_slider",
-    on_change=update_fission_input
+    on_change=update_fission_input,
+    persist_state="session"
 )
 
 # Convertir la valeur sélectionnée en float pour les calculs
@@ -90,11 +87,9 @@ fissions_number_input = st.sidebar.number_input(
     step=step,
     format="%.1e",
     key="fission_input",
-    on_change=update_fission_slider
+    on_change=update_fission_slider,
+    persist_state="session"
 )
-
-# Mémoriser la dernière valeur choisie afin qu'elle survive à un changement de page
-st.session_state.fission_count = fissions_number_input
 
 # Calcul du facteur de multiplication des doses
 dose_multiplier = fissions_number_input / 1e17
