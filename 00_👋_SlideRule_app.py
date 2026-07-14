@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
     menu_items={
         'Get Help': None,
-        'Report a bug': "https://gitlab.extra.irsn.fr/snc/SlideRule/-/issues",
+        'Report a bug': "https://gitlab.asnr.fr/snc/SlideRule/-/work_items",
         'About': "https://ncsp.llnl.gov/analytical-methods/criticality-slide-rule"
     }
 )

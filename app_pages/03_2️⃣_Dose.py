@@ -31,7 +31,7 @@ data = load_data('final')
 
 # Création des valeurs pour le select_slider
 values = []
-for exponent in range(13, 21):  # For 1.0E13 to 1.0E20
+for exponent in range(13, 24):  # For 1.0E13 to 9.9E23
     base = 10 ** exponent
     values.extend([base * i for i in np.arange(1, 10, 0.1)])  # 1.0, 1.1, ..., 9.9
 
@@ -82,7 +82,7 @@ step = (10 ** exponent) * 0.1
 fissions_number_input = st.sidebar.number_input(
     "OR enter the number of fissions",
     min_value=1.0e+13,
-    max_value=1.0e+21,
+    max_value=9.9e+23,
     value=fissions_number_slider,
     step=step,
     format="%.1e",
