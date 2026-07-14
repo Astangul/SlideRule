@@ -74,6 +74,7 @@ pages = {
     ],
     "Resources": [
         st.Page("app_pages/04_📄_Documentation.py", title="Documentation", icon="📄"),
+        st.Page("app_pages/06_💾_Database.py", title="Database", icon="💾"),
     ],
     "Advanced use": [
         st.Page("app_pages/01_0️⃣_Raw_results.py", title="Raw results", icon="🔢"),
