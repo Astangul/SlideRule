@@ -331,7 +331,7 @@ def filter_wall_df(data, particles, screens, cases, codes, thicknesses, plot=Fal
     
     # Calculate absolute uncertainties if not already present
     if "Absolute Uncertainty" not in filtered_data.columns:
-        filtered_data["Absolute Uncertainty"] = filtered_data["1s uncertainty"] * filtered_data["Dose (Gy)"]
+        filtered_data["Absolute Uncertainty"] = filtered_data["1s uncertainty"] * filtered_data["Dose"]
     
     # Add 'Filter Combo' column if not already present
     if 'Filter Combo' not in filtered_data.columns:
@@ -355,7 +355,7 @@ def filter_wall_df(data, particles, screens, cases, codes, thicknesses, plot=Fal
             df_subset = filtered_data[filtered_data['Filter Combo'] == combo]
             fig.add_trace(go.Scatter(
                 x=df_subset["Distance (m)"],
-                y=df_subset["Dose (Gy)"],
+                y=df_subset["Dose"],
                 mode='lines+markers',
                 name=combo,
                 line=dict(dash='dash'),
