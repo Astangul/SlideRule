@@ -379,154 +379,39 @@ def predict_simple_exponential(params, r, T):
     return A * r**(-k) * np.exp(-b*r) * np.exp(-c*T)
 
 # ______________________________________________________________________________________________________________________
-# Coupled Kernel model function (C1)
+# ______________________________________________________________________________________________________________________
+# Physical Coupled + Skyshine model function
 #
-# Physical rationale: separable models D = f(r) x g(T) miss the fact that a
-# thicker shield hardens the spectrum, which shifts BOTH the geometric
-# exponent and the air attenuation. This model couples r and T explicitly
-# via T*ln(r) and T*r terms, and is fitted in one closed-form least-squares
-# pass (no initial guess, no non-convergence risk).
+# Physical rationale: separable models D = f(r) x g(T) miss that a thicker
+# shield hardens the spectrum. We keep an additive direct + skyshine structure
+# (like Skyshine Enhanced) so the dose is a sum of two positive, monotonically
+# decreasing-in-T components. Crucially, every thickness coefficient is
+# constrained to be >= 0, which GUARANTEES d(dose)/dT <= 0 at any distance:
+# adding shield can never increase the predicted dose. This makes the model
+# safe for extrapolation to shield thicknesses beyond the fitted range
+# (custom-thickness prediction), unlike an unconstrained log-polynomial in T.
 
-def fit_coupled_kernel(r_data, T_data, D_data):
+def fit_physical_coupled(r_data, T_data, D_data):
     """
-    Coupled Point Kernel model (least-squares closed form)
-
-    Parameters (7):
-    - a0: Log-amplitude
-    - a1: Base geometric exponent (coefficient of ln r)
-    - a2: Spectral hardening of the exponent (coefficient of T.ln r)
-    - a3: Air attenuation (coefficient of r, typically negative = -mu_air)
-    - a4: Spectral hardening of air attenuation (coefficient of T.r)
-    - a5: Shield attenuation (coefficient of T, typically negative = -mu_screen)
-    - a6: Shield build-up (coefficient of T^2)
-
-    Model: ln D(r,T) = a0 + (a1 + a2.T).ln r + (a3 + a4.T).r + a5.T + a6.T^2
-    """
-    r_data = np.array(r_data, dtype=float)
-    T_data = np.array(T_data, dtype=float)
-    D_data = np.array(D_data, dtype=float)
-
-    valid = (~np.isnan(D_data)) & (D_data > 0) & (r_data > 0)
-    r_data, T_data, D_data = r_data[valid], T_data[valid], D_data[valid]
-
-    if len(D_data) == 0:
-        return None, None, None, None, None, None, None, 0, [0]*7
-
-    try:
-        ln_D = np.log(D_data)
-        u = np.log(r_data)
-        X = np.column_stack([np.ones_like(r_data), u, T_data*u, r_data, T_data*r_data, T_data, T_data**2])
-        beta, _, _, _ = np.linalg.lstsq(X, ln_D, rcond=None)
-
-        ln_D_fit = X @ beta
-        ss_res = np.sum((ln_D - ln_D_fit)**2)
-        ss_tot = np.sum((ln_D - np.mean(ln_D))**2)
-        R2 = 1 - ss_res/ss_tot if ss_tot > 0 else 0.0
-
-        return (*beta, R2, [0.0]*7)
-    except Exception as e:
-        st.error(f"Model fitting error: {e}")
-        return None, None, None, None, None, None, None, 0, [0]*7
-
-def predict_coupled_kernel(params, r, T):
-    """
-    Calculate the prediction of the Coupled Kernel model
-
-    Args:
-        params: Tuple of 7 parameters (a0, a1, a2, a3, a4, a5, a6)
-        r: Distance(s) in meters
-        T: Shield thickness(es) in cm
-
-    Returns:
-        Predicted dose in Gy
-    """
-    a0, a1, a2, a3, a4, a5, a6 = params
-    u = np.log(r)
-    return np.exp(a0 + a1*u + a2*T*u + a3*r + a4*T*r + a5*T + a6*T**2)
-
-# ______________________________________________________________________________________________________________________
-# Coupled Kernel + sqrt(r) Air Build-up model function (C4)
-
-def fit_coupled_kernel_sqrt(r_data, T_data, D_data):
-    """
-    Coupled Point Kernel model with sqrt(r) air build-up term (least-squares closed form)
-
-    Parameters (8):
-    - a0: Log-amplitude
-    - a1: Base geometric exponent (coefficient of ln r)
-    - a2: Spectral hardening of the exponent (coefficient of T.ln r)
-    - a3: Air attenuation (coefficient of r, typically negative = -mu_air)
-    - a4: Spectral hardening of air attenuation (coefficient of T.r)
-    - a5: Air build-up (coefficient of sqrt(r), typically positive)
-    - a6: Shield attenuation (coefficient of T, typically negative = -mu_screen)
-    - a7: Shield build-up (coefficient of T^2)
-
-    Model: ln D(r,T) = a0 + (a1 + a2.T).ln r + (a3 + a4.T).r + a5.sqrt(r) + a6.T + a7.T^2
-    """
-    r_data = np.array(r_data, dtype=float)
-    T_data = np.array(T_data, dtype=float)
-    D_data = np.array(D_data, dtype=float)
-
-    valid = (~np.isnan(D_data)) & (D_data > 0) & (r_data > 0)
-    r_data, T_data, D_data = r_data[valid], T_data[valid], D_data[valid]
-
-    if len(D_data) == 0:
-        return None, None, None, None, None, None, None, None, 0, [0]*8
-
-    try:
-        ln_D = np.log(D_data)
-        u = np.log(r_data)
-        X = np.column_stack([np.ones_like(r_data), u, T_data*u, r_data, T_data*r_data,
-                             np.sqrt(r_data), T_data, T_data**2])
-        beta, _, _, _ = np.linalg.lstsq(X, ln_D, rcond=None)
-
-        ln_D_fit = X @ beta
-        ss_res = np.sum((ln_D - ln_D_fit)**2)
-        ss_tot = np.sum((ln_D - np.mean(ln_D))**2)
-        R2 = 1 - ss_res/ss_tot if ss_tot > 0 else 0.0
-
-        return (*beta, R2, [0.0]*8)
-    except Exception as e:
-        st.error(f"Model fitting error: {e}")
-        return None, None, None, None, None, None, None, None, 0, [0]*8
-
-def predict_coupled_kernel_sqrt(params, r, T):
-    """
-    Calculate the prediction of the Coupled Kernel + sqrt(r) model
-
-    Args:
-        params: Tuple of 8 parameters (a0, a1, a2, a3, a4, a5, a6, a7)
-        r: Distance(s) in meters
-        T: Shield thickness(es) in cm
-
-    Returns:
-        Predicted dose in Gy
-    """
-    a0, a1, a2, a3, a4, a5, a6, a7 = params
-    u = np.log(r)
-    return np.exp(a0 + a1*u + a2*T*u + a3*r + a4*T*r + a5*np.sqrt(r) + a6*T + a7*T**2)
-
-# ______________________________________________________________________________________________________________________
-# Kernel + Skyshine Floor model function (C3)
-
-def fit_kernel_skyshine(r_data, T_data, D_data):
-    """
-    Hardened direct kernel plus an additive skyshine floor (robust far-field behavior)
+    Physical Coupled + Skyshine model (monotone in T by construction)
 
     Parameters (10):
     - A: Direct component amplitude
     - p: Geometric exponent
-    - mu_air: Air attenuation (m⁻¹)
-    - mu_T: Spectral hardening of air attenuation (m⁻¹.cm⁻¹)
-    - s1: Linear shield attenuation (cm⁻¹)
-    - s2: Quadratic shield term (cm⁻²)
+    - mu_air: Air attenuation (m-1)
+    - mu_T: Thickness-air coupling (m-1.cm-1, >= 0)
+    - s1: Linear shield attenuation (cm-1, >= 0)
+    - s2: Quadratic shield attenuation (cm-2, >= 0)
     - B: Skyshine component amplitude
     - n_sky: Skyshine geometric exponent
-    - mu_sky: Skyshine attenuation in air (m⁻¹)
-    - mu_s2: Skyshine attenuation in shield (cm⁻¹)
+    - mu_sky: Skyshine attenuation in air (m-1)
+    - mu_s2: Skyshine attenuation in shield (cm-1, >= 0)
 
     Model: D(r,T) = A.r^(-p).exp(-(mu_air+mu_T.T).r).exp(-s1.T-s2.T^2)
                     + B.r^(-n_sky).exp(-mu_sky.r).exp(-mu_s2.T)
+
+    All thickness coefficients (mu_T, s1, s2, mu_s2) are bounded >= 0, so both
+    components decrease monotonically with T for any r > 0.
     """
     r_data = np.array(r_data, dtype=float)
     T_data = np.array(T_data, dtype=float)
@@ -539,26 +424,11 @@ def fit_kernel_skyshine(r_data, T_data, D_data):
         return None, None, None, None, None, None, None, None, None, None, 0, [0]*10
 
     ln_D = np.log(D_data)
-    u = np.log(r_data)
 
-    # Initial estimate for the direct component using linear regression (no floor)
-    b, _, _, _ = np.linalg.lstsq(
-        np.column_stack([np.ones_like(r_data), u, r_data, T_data*r_data, T_data, T_data**2]),
-        ln_D, rcond=None
-    )
-    A0 = np.exp(np.clip(b[0], -50, 50))
-    p0_init = max(-b[1], 0.5)
-    mu_air0 = max(-b[2], 1e-3)
-    mu_T0 = np.clip(b[3], -0.005, 0.005)
-    s10 = max(-b[4], 0.0)
-    s20 = b[5]
-
-    lo = [0, 0.5, 0, -0.01, -0.5, -0.05, 0, 0.5, 0, 0]
+    # Bounds: mu_T, s1, s2, mu_s2 >= 0  ->  monotone decreasing in T (physical)
+    lo = [0, 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0]
     hi = [np.inf, 3, 0.2, 0.01, 1, 0.05, np.inf, 2.5, 0.05, 1]
-    initial_guess = [A0, p0_init, mu_air0, mu_T0, s10, s20, A0*1e-3, 1.2, 0.005, 0.02]
-    initial_guess = [min(max(initial_guess[k], lo[k] + 1e-9),
-                         (hi[k] - 1e-9) if np.isfinite(hi[k]) else initial_guess[k])
-                     for k in range(10)]
+    initial_guess = [1.0, 2.0, 0.03, 0.0, 0.1, 0.001, 1e-3, 1.2, 0.005, 0.02]
 
     def log_model(vars, A, p, mu_air, mu_T, s1, s2, B, n_sky, mu_sky, mu_s2):
         r, T = vars
@@ -581,9 +451,9 @@ def fit_kernel_skyshine(r_data, T_data, D_data):
         st.error(f"Model fitting error: {e}")
         return None, None, None, None, None, None, None, None, None, None, 0, [0]*10
 
-def predict_kernel_skyshine(params, r, T):
+def predict_physical_coupled(params, r, T):
     """
-    Calculate the prediction of the Kernel + Skyshine Floor model
+    Calculate the prediction of the Physical Coupled + Skyshine model
 
     Args:
         params: Tuple of 10 parameters (A, p, mu_air, mu_T, s1, s2, B, n_sky, mu_sky, mu_s2)
@@ -596,90 +466,6 @@ def predict_kernel_skyshine(params, r, T):
     A, p, mu_air, mu_T, s1, s2, B, n_sky, mu_sky, mu_s2 = params
     direct = A * r**(-p) * np.exp(-(mu_air + mu_T*T)*r) * np.exp(-s1*T - s2*T**2)
     sky = B * r**(-n_sky) * np.exp(-mu_sky*r) * np.exp(-mu_s2*T)
-    return direct + sky
-
-# ______________________________________________________________________________________________________________________
-# Coupled Kernel sqrt(r) + Skyshine Floor model function (C5) — best raw fit
-
-def fit_coupled_sqrt_skyshine(r_data, T_data, D_data):
-    """
-    Coupled kernel with sqrt(r) air build-up plus an additive skyshine floor
-
-    Parameters (12):
-    - a0: Log-amplitude of the direct component
-    - c_lnr: Base geometric exponent (coefficient of ln r)
-    - c_Tlnr: Spectral hardening of the exponent (coefficient of T.ln r)
-    - c_r: Air attenuation (coefficient of r)
-    - c_Tr: Spectral hardening of air attenuation (coefficient of T.r)
-    - c_sqrt: Air build-up (coefficient of sqrt(r))
-    - c_T: Shield attenuation (coefficient of T)
-    - c_T2: Shield build-up (coefficient of T^2)
-    - lnB: Log-amplitude of the skyshine component
-    - n_sky: Skyshine geometric exponent
-    - mu_sky: Skyshine attenuation in air (m⁻¹)
-    - mu_s2: Skyshine attenuation in shield (cm⁻¹)
-    """
-    r_data = np.array(r_data, dtype=float)
-    T_data = np.array(T_data, dtype=float)
-    D_data = np.array(D_data, dtype=float)
-
-    valid = (~np.isnan(D_data)) & (D_data > 0) & (r_data > 0)
-    r_data, T_data, D_data = r_data[valid], T_data[valid], D_data[valid]
-
-    if len(D_data) == 0:
-        return (None,)*12 + (0, [0]*12)
-
-    ln_D = np.log(D_data)
-
-    # Initialize the direct-component coefficients from the closed-form C4 fit
-    c4 = fit_coupled_kernel_sqrt(r_data, T_data, D_data)
-    a0, a1, a2, a3, a4, a5, a6, a7 = c4[:8]
-    initial_guess = [a0, -a1, -a2, -a3, -a4, a5, -a6, -a7, a0 - 8, 1.2, 0.005, 0.02]
-
-    lo = [-50, -3, -0.5, -0.5, -0.05, -5, -1, -0.5, -80, 0.5, 0, 0]
-    hi = [ 50,  3,  0.5,  0.5,  0.05,  5,  1,  0.5,  50, 2.5, 0.05, 1]
-    initial_guess = [min(max(initial_guess[k], lo[k] + 1e-6), hi[k] - 1e-6) for k in range(12)]
-
-    def log_model(vars, a0, c_lnr, c_Tlnr, c_r, c_Tr, c_sqrt, c_T, c_T2, lnB, n_sky, mu_sky, mu_s2):
-        r, T = vars
-        u = np.log(r)
-        direct = np.exp(np.clip(a0 - c_lnr*u - c_Tlnr*T*u - c_r*r - c_Tr*T*r
-                                + c_sqrt*np.sqrt(r) - c_T*T - c_T2*T**2, -700, 700))
-        sky = np.exp(np.clip(lnB, -700, 700)) * r**(-n_sky) * np.exp(-mu_sky*r) * np.exp(-mu_s2*T)
-        return np.log(np.maximum(direct + sky, 1e-300))
-
-    try:
-        popt, pcov = curve_fit(log_model, (r_data, T_data), ln_D,
-                              p0=initial_guess, maxfev=150000, bounds=(lo, hi))
-
-        perr = np.sqrt(np.diag(pcov))
-        ln_D_fit = log_model((r_data, T_data), *popt)
-        ss_res = np.sum((ln_D - ln_D_fit)**2)
-        ss_tot = np.sum((ln_D - np.mean(ln_D))**2)
-        R2 = 1 - ss_res/ss_tot if ss_tot > 0 else 0.0
-
-        return (*popt, R2, list(perr))
-    except Exception as e:
-        st.error(f"Model fitting error: {e}")
-        return (None,)*12 + (0, [0]*12)
-
-def predict_coupled_sqrt_skyshine(params, r, T):
-    """
-    Calculate the prediction of the Coupled Kernel sqrt(r) + Skyshine Floor model
-
-    Args:
-        params: Tuple of 12 parameters
-        r: Distance(s) in meters
-        T: Shield thickness(es) in cm
-
-    Returns:
-        Predicted dose in Gy
-    """
-    a0, c_lnr, c_Tlnr, c_r, c_Tr, c_sqrt, c_T, c_T2, lnB, n_sky, mu_sky, mu_s2 = params
-    u = np.log(r)
-    direct = np.exp(np.clip(a0 - c_lnr*u - c_Tlnr*T*u - c_r*r - c_Tr*T*r
-                            + c_sqrt*np.sqrt(r) - c_T*T - c_T2*T**2, -700, 700))
-    sky = np.exp(np.clip(lnB, -700, 700)) * r**(-n_sky) * np.exp(-mu_sky*r) * np.exp(-mu_s2*T)
     return direct + sky
 
 # ______________________________________________________________________________________________________________________
@@ -718,33 +504,12 @@ AVAILABLE_MODELS = {
         "icon": "",
         "performance": "R² ≈ 0.9895 | Error ≈ variable"
     },
-    "Coupled Kernel": {
-        "name": "Coupled Kernel (7 parameters)",
-        "description": "Point kernel with r-T coupling for spectral hardening (closed-form fit)",
-        "params_count": 7,
-        "icon": "🔗",
-        "performance": "R² ≈ 0.9994 | Error ≈ 10.2% (median, 68 configs)"
-    },
-    "Coupled Kernel + sqrt(r)": {
-        "name": "Coupled Kernel + sqrt(r) (8 parameters)",
-        "description": "Coupled kernel with an air build-up term in sqrt(r) (closed-form fit)",
-        "params_count": 8,
-        "icon": "🔗",
-        "performance": "R² ≈ 0.9997 | Error ≈ 6.2% (median, 68 configs)"
-    },
-    "Kernel + Skyshine Floor": {
-        "name": "Kernel + Skyshine Floor (10 parameters)",
-        "description": "Hardened direct kernel with an additive skyshine floor (best generalization)",
+    "Physical Coupled": {
+        "name": "Physical Coupled + Skyshine (10 parameters)",
+        "description": "Direct + skyshine components, monotone in thickness by construction (safe extrapolation)",
         "params_count": 10,
         "icon": "🔗",
-        "performance": "R² ≈ 0.9998 | Error ≈ 5.4% (median, 68 configs)"
-    },
-    "Coupled Kernel + Skyshine": {
-        "name": "Coupled Kernel + Skyshine (12 parameters)",
-        "description": "Coupled kernel with sqrt(r) build-up plus an additive skyshine floor (best raw fit)",
-        "params_count": 12,
-        "icon": "🔗",
-        "performance": "R² ≈ 0.9998 | Error ≈ 4.8% (median, 68 configs)"
+        "performance": "R² ≈ 0.9997 | Error ≈ 6.2% (median, 68 configs) | Monotone in T"
     },
 }
 
@@ -835,14 +600,8 @@ if st.button(f"🔄 Run {selected_model} Fitting", type="primary"):
             result = fit_super_hybrid(r_fit, T_fit, D_fit)
         elif selected_model == "Hybrid Corrected":
             result = fit_hybrid_corrected(r_fit, T_fit, D_fit)
-        elif selected_model == "Coupled Kernel":
-            result = fit_coupled_kernel(r_fit, T_fit, D_fit)
-        elif selected_model == "Coupled Kernel + sqrt(r)":
-            result = fit_coupled_kernel_sqrt(r_fit, T_fit, D_fit)
-        elif selected_model == "Kernel + Skyshine Floor":
-            result = fit_kernel_skyshine(r_fit, T_fit, D_fit)
-        elif selected_model == "Coupled Kernel + Skyshine":
-            result = fit_coupled_sqrt_skyshine(r_fit, T_fit, D_fit)
+        elif selected_model == "Physical Coupled":
+            result = fit_physical_coupled(r_fit, T_fit, D_fit)
         # Add more models here as they are implemented
         else:
             st.error(f"Model '{selected_model}' not yet implemented.")
@@ -988,76 +747,21 @@ with st.expander(f"ℹ️ About the {selected_model} Model", expanded=False):
         | `ε` | Correction amplitude | - |
         | `λ_r` | Correction characteristic length | m |
         """)
-    elif selected_model == "Coupled Kernel":
+    elif selected_model == "Physical Coupled":
         st.markdown(r"""
         ## 📐 Model Equation
 
-        Separable models $D = f(r) \cdot g(T)$ miss an important effect: a thicker shield **hardens the spectrum**,
-        which shifts both the geometric exponent and the air attenuation. The **Coupled Kernel** model couples
-        $r$ and $T$ explicitly:
+        Separable models $D = f(r) \cdot g(T)$ miss an important effect: a thicker shield **hardens the
+        spectrum**. This model keeps an **additive direct + skyshine** structure (like Skyshine Enhanced),
+        so the dose is a sum of two positive components:
 
-        $$\ln D(r, T) = a_0 + (a_1 + a_2 T)\ln r + (a_3 + a_4 T)\, r + a_5 T + a_6 T^2$$
+        $$D_{\text{total}}(r, T) = \underbrace{A\, r^{-p}\, e^{-(\mu_{\text{air}} + \mu_T T)\, r}\, e^{-s_1 T - s_2 T^2}}_{D_{\text{direct}}} \; + \; \underbrace{B\, r^{-n_{\text{sky}}}\, e^{-\mu_{\text{sky}}\, r}\, e^{-\mu_{s2}\, T}}_{D_{\text{skyshine}}}$$
 
-        This model is fitted in a **single closed-form least-squares pass** (no initial guess, no risk of
-        non-convergence), which makes it very robust across configurations.
-
-        ## 🔧 Model Parameters (7)
-
-        | Parameter | Description |
-        |-----------|-------------|
-        | `a₀` | Log-amplitude |
-        | `a₁` | Base geometric exponent (≈ -2 for a point source) |
-        | `a₂` | Spectral hardening of the exponent (coefficient of T·ln r) |
-        | `a₃` | Air attenuation (coefficient of r, ≈ -μ_air) |
-        | `a₄` | Spectral hardening of air attenuation (coefficient of T·r) |
-        | `a₅` | Shield attenuation (coefficient of T, ≈ -μ_screen) |
-        | `a₆` | Shield build-up (coefficient of T²) |
-
-        ## 💡 Use Cases
-
-        - **Advantages**: Closed-form fit (linear least squares), always converges, physically interpretable
-          coefficients
-        - **Benchmark**: Beats Skyshine Enhanced on 41/68 tested configurations (in-sample fit)
-        """)
-    elif selected_model == "Coupled Kernel + sqrt(r)":
-        st.markdown(r"""
-        ## 📐 Model Equation
-
-        Extends the **Coupled Kernel** model with an air build-up term in $\sqrt{r}$:
-
-        $$\ln D(r, T) = a_0 + (a_1 + a_2 T)\ln r + a_5\sqrt{r} + (a_3 + a_4 T)\, r + a_6 T + a_7 T^2$$
-
-        Like the Coupled Kernel model, this is fitted in a **single closed-form least-squares pass**.
-        It is the recommended default replacement for Skyshine Enhanced: best raw fit among the
-        closed-form models, and no fitting risk.
-
-        ## 🔧 Model Parameters (8)
-
-        | Parameter | Description |
-        |-----------|-------------|
-        | `a₀` | Log-amplitude |
-        | `a₁` | Base geometric exponent (≈ -2 for a point source) |
-        | `a₂` | Spectral hardening of the exponent (coefficient of T·ln r) |
-        | `a₃` | Air attenuation (coefficient of r, ≈ -μ_air) |
-        | `a₄` | Spectral hardening of air attenuation (coefficient of T·r) |
-        | `a₅` | Air build-up (coefficient of √r, typically > 0) |
-        | `a₆` | Shield attenuation (coefficient of T, ≈ -μ_screen) |
-        | `a₇` | Shield build-up (coefficient of T²) |
-
-        ## 💡 Use Cases
-
-        - **Advantages**: Closed-form fit, always converges, best in-sample fit among closed-form models
-        - **Benchmark**: Beats Skyshine Enhanced on 59/68 tested configurations, median error 6.2% vs 9.8%
-        """)
-    elif selected_model == "Kernel + Skyshine Floor":
-        st.markdown(r"""
-        ## 📐 Model Equation
-
-        Combines a **hardened direct kernel** with an **additive skyshine floor**, which keeps the far-field
-        behavior physically sound and gives the best generalization when extrapolating to a shield thickness
-        that was not used for the fit:
-
-        $$D_{\text{total}}(r, T) = \underbrace{A\, r^{-p}\, e^{-(\mu_{\text{air}} + \mu_T T)\, r}\, e^{-s_1 T - s_2 T^2}}_{D_{\text{direct}} \text{ (hardened)}} \; + \; \underbrace{B\, r^{-n_{\text{sky}}}\, e^{-\mu_{\text{sky}}\, r}\, e^{-\mu_{s2}\, T}}_{D_{\text{skyshine}}}$$
+        **Physical guarantee.** All thickness coefficients $\mu_T, s_1, s_2, \mu_{s2}$ are constrained to be
+        $\geq 0$. Therefore each component decreases monotonically with $T$ at any distance, so
+        $\partial D / \partial T \leq 0$: **adding shield can never increase the predicted dose.** This makes
+        the model safe for predicting doses at shield thicknesses beyond the fitted range (custom-thickness
+        prediction) — unlike an unconstrained polynomial in $T$, which can blow up when extrapolated.
 
         ## 🔧 Model Parameters (10)
 
@@ -1066,53 +770,21 @@ with st.expander(f"ℹ️ About the {selected_model} Model", expanded=False):
         | `A` | Direct component amplitude | - |
         | `p` | Geometric exponent | - |
         | `μ_air` | Air attenuation | m⁻¹ |
-        | `μ_T` | Spectral hardening of air attenuation | m⁻¹·cm⁻¹ |
-        | `s₁` | Linear shield attenuation | cm⁻¹ |
-        | `s₂` | Quadratic shield term | cm⁻² |
+        | `μ_T` | Thickness–air coupling (≥ 0) | m⁻¹·cm⁻¹ |
+        | `s₁` | Linear shield attenuation (≥ 0) | cm⁻¹ |
+        | `s₂` | Quadratic shield attenuation (≥ 0) | cm⁻² |
         | `B` | Skyshine component amplitude | - |
         | `n_sky` | Skyshine geometric exponent | - |
         | `μ_sky` | Skyshine attenuation in air | m⁻¹ |
-        | `μ_s2` | Skyshine attenuation in shield | cm⁻¹ |
+        | `μ_s2` | Skyshine attenuation in shield (≥ 0) | cm⁻¹ |
 
         ## 💡 Use Cases
 
-        - **Advantages**: Best generalization across shield thicknesses (median error 9.6% under
-          leave-one-thickness-out cross-validation, vs 17.5% for Skyshine Enhanced)
-        - **Benchmark**: Beats Skyshine Enhanced on 66/68 tested configurations (in-sample fit)
-        - **Recommended** when robustness to extrapolation matters more than the very best raw fit
-        """)
-    elif selected_model == "Coupled Kernel + Skyshine":
-        st.markdown(r"""
-        ## 📐 Model Equation
-
-        Combines the coupled $\sqrt{r}$ direct kernel with an additive skyshine floor — the most flexible
-        of the new models, and the one with the best raw fit:
-
-        $$D_{\text{total}}(r, T) = \underbrace{\exp\!\big[a_0 - c_{\ln r}\ln r - c_{T\ln r}\, T\ln r - c_r\, r - c_{Tr}\, T r + c_{\sqrt{r}}\sqrt{r} - c_T T - c_{T^2} T^2\big]}_{D_{\text{direct}}} \; + \; \underbrace{e^{\ln B}\, r^{-n_{\text{sky}}}\, e^{-\mu_{\text{sky}}\, r}\, e^{-\mu_{s2}\, T}}_{D_{\text{skyshine}}}$$
-
-        ## 🔧 Model Parameters (12)
-
-        | Parameter | Description |
-        |-----------|-------------|
-        | `a₀` | Log-amplitude of the direct component |
-        | `c_lnr` | Base geometric exponent |
-        | `c_Tlnr` | Spectral hardening of the exponent (T·ln r) |
-        | `c_r` | Air attenuation |
-        | `c_Tr` | Spectral hardening of air attenuation (T·r) |
-        | `c_sqrt` | Air build-up (√r) |
-        | `c_T` | Shield attenuation |
-        | `c_T2` | Shield build-up (T²) |
-        | `lnB` | Log-amplitude of the skyshine component |
-        | `n_sky` | Skyshine geometric exponent |
-        | `μ_sky` | Skyshine attenuation in air |
-        | `μ_s2` | Skyshine attenuation in shield |
-
-        ## 💡 Use Cases
-
-        - **Advantages**: Best raw fit of all tested models (median error 4.8%, R² ≈ 0.9998)
-        - **Benchmark**: Beats Skyshine Enhanced on **68/68** tested configurations (in-sample fit)
-        - **Trade-off**: 12 parameters, non-linear fit — use when fit quality matters more than
-          fitting speed/robustness
+        - **Advantages**: Monotone in thickness by construction (physically safe extrapolation), while still
+          beating Skyshine Enhanced on the fit quality
+        - **Benchmark**: Median error 6.2% vs 9.8% for Skyshine Enhanced; better median fit on 57/68 tested
+          configurations; **0/68** monotonicity failures when extrapolating up to 200 cm
+        - **Recommended** as the default replacement for Skyshine Enhanced
         """)
     else:
         st.info(f"Documentation for '{selected_model}' model coming soon.")
@@ -1176,64 +848,20 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
                 'Correction amplitude',
                 'Correction characteristic length'
             ]
-        elif selected_model == "Coupled Kernel":
-            param_names = ['a₀', 'a₁', 'a₂', 'a₃', 'a₄', 'a₅', 'a₆']
-            param_units = ['-', '-', '-', 'm⁻¹', 'm⁻¹·cm⁻¹', 'cm⁻¹', 'cm⁻²']
-            param_descriptions = [
-                'Log-amplitude',
-                'Base geometric exponent (coeff. of ln r)',
-                'Spectral hardening of the exponent (coeff. of T.ln r)',
-                'Air attenuation (coeff. of r)',
-                'Spectral hardening of air attenuation (coeff. of T.r)',
-                'Shield attenuation (coeff. of T)',
-                'Shield build-up (coeff. of T²)'
-            ]
-        elif selected_model == "Coupled Kernel + sqrt(r)":
-            param_names = ['a₀', 'a₁', 'a₂', 'a₃', 'a₄', 'a₅', 'a₆', 'a₇']
-            param_units = ['-', '-', '-', 'm⁻¹', 'm⁻¹·cm⁻¹', '-', 'cm⁻¹', 'cm⁻²']
-            param_descriptions = [
-                'Log-amplitude',
-                'Base geometric exponent (coeff. of ln r)',
-                'Spectral hardening of the exponent (coeff. of T.ln r)',
-                'Air attenuation (coeff. of r)',
-                'Spectral hardening of air attenuation (coeff. of T.r)',
-                'Air build-up (coeff. of sqrt(r))',
-                'Shield attenuation (coeff. of T)',
-                'Shield build-up (coeff. of T²)'
-            ]
-        elif selected_model == "Kernel + Skyshine Floor":
+        elif selected_model == "Physical Coupled":
             param_names = ['A', 'p', 'μ_air', 'μ_T', 's₁', 's₂', 'B', 'n_sky', 'μ_sky', 'μ_s2']
             param_units = ['-', '-', 'm⁻¹', 'm⁻¹·cm⁻¹', 'cm⁻¹', 'cm⁻²', '-', '-', 'm⁻¹', 'cm⁻¹']
             param_descriptions = [
                 'Direct component amplitude',
                 'Geometric exponent',
                 'Air attenuation',
-                'Spectral hardening of air attenuation',
-                'Linear shield attenuation',
-                'Quadratic shield term',
+                'Thickness–air coupling (≥ 0)',
+                'Linear shield attenuation (≥ 0)',
+                'Quadratic shield attenuation (≥ 0)',
                 'Skyshine component amplitude',
                 'Skyshine geometric exponent',
                 'Skyshine attenuation in air',
-                'Skyshine attenuation in shield'
-            ]
-        elif selected_model == "Coupled Kernel + Skyshine":
-            param_names = ['a₀', 'c_lnr', 'c_Tlnr', 'c_r', 'c_Tr', 'c_sqrt', 'c_T', 'c_T2',
-                           'lnB', 'n_sky', 'μ_sky', 'μ_s2']
-            param_units = ['-', '-', '-', 'm⁻¹', 'm⁻¹·cm⁻¹', '-', 'cm⁻¹', 'cm⁻²',
-                          '-', '-', 'm⁻¹', 'cm⁻¹']
-            param_descriptions = [
-                'Log-amplitude (direct component)',
-                'Base geometric exponent',
-                'Spectral hardening of the exponent (T.ln r)',
-                'Air attenuation',
-                'Spectral hardening of air attenuation (T.r)',
-                'Air build-up (sqrt(r))',
-                'Shield attenuation',
-                'Shield build-up (T²)',
-                'Log-amplitude (skyshine component)',
-                'Skyshine geometric exponent',
-                'Skyshine attenuation in air',
-                'Skyshine attenuation in shield'
+                'Skyshine attenuation in shield (≥ 0)'
             ]
         else:
             param_names = [f'p{i}' for i in range(len(params))]
@@ -1264,14 +892,8 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
                 D_pred = predict_super_hybrid(params, r_fit, T_fit)
             elif selected_model == "Hybrid Corrected":
                 D_pred = predict_hybrid_corrected(params, r_fit, T_fit)
-            elif selected_model == "Coupled Kernel":
-                D_pred = predict_coupled_kernel(params, r_fit, T_fit)
-            elif selected_model == "Coupled Kernel + sqrt(r)":
-                D_pred = predict_coupled_kernel_sqrt(params, r_fit, T_fit)
-            elif selected_model == "Kernel + Skyshine Floor":
-                D_pred = predict_kernel_skyshine(params, r_fit, T_fit)
-            elif selected_model == "Coupled Kernel + Skyshine":
-                D_pred = predict_coupled_sqrt_skyshine(params, r_fit, T_fit)
+            elif selected_model == "Physical Coupled":
+                D_pred = predict_physical_coupled(params, r_fit, T_fit)
             else:
                 D_pred = np.zeros_like(D_fit)
             
@@ -1386,14 +1008,8 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
             D_model = predict_super_hybrid(params, r_model, np.full_like(r_model, T_val))
         elif selected_model == "Hybrid Corrected":
             D_model = predict_hybrid_corrected(params, r_model, np.full_like(r_model, T_val))
-        elif selected_model == "Coupled Kernel":
-            D_model = predict_coupled_kernel(params, r_model, np.full_like(r_model, T_val))
-        elif selected_model == "Coupled Kernel + sqrt(r)":
-            D_model = predict_coupled_kernel_sqrt(params, r_model, np.full_like(r_model, T_val))
-        elif selected_model == "Kernel + Skyshine Floor":
-            D_model = predict_kernel_skyshine(params, r_model, np.full_like(r_model, T_val))
-        elif selected_model == "Coupled Kernel + Skyshine":
-            D_model = predict_coupled_sqrt_skyshine(params, r_model, np.full_like(r_model, T_val))
+        elif selected_model == "Physical Coupled":
+            D_model = predict_physical_coupled(params, r_model, np.full_like(r_model, T_val))
         else:
             D_model = np.zeros_like(r_model)
         
@@ -1421,14 +1037,8 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
             D_custom = predict_super_hybrid(params, r_custom, np.full_like(r_custom, custom_thickness))
         elif selected_model == "Hybrid Corrected":
             D_custom = predict_hybrid_corrected(params, r_custom, np.full_like(r_custom, custom_thickness))
-        elif selected_model == "Coupled Kernel":
-            D_custom = predict_coupled_kernel(params, r_custom, np.full_like(r_custom, custom_thickness))
-        elif selected_model == "Coupled Kernel + sqrt(r)":
-            D_custom = predict_coupled_kernel_sqrt(params, r_custom, np.full_like(r_custom, custom_thickness))
-        elif selected_model == "Kernel + Skyshine Floor":
-            D_custom = predict_kernel_skyshine(params, r_custom, np.full_like(r_custom, custom_thickness))
-        elif selected_model == "Coupled Kernel + Skyshine":
-            D_custom = predict_coupled_sqrt_skyshine(params, r_custom, np.full_like(r_custom, custom_thickness))
+        elif selected_model == "Physical Coupled":
+            D_custom = predict_physical_coupled(params, r_custom, np.full_like(r_custom, custom_thickness))
         else:
             D_custom = np.zeros_like(r_custom)
 
@@ -1495,14 +1105,8 @@ if f'{selected_model}_fit_done' in st.session_state and st.session_state[f'{sele
                 D_custom = predict_super_hybrid(params, r_custom, np.full_like(r_custom, custom_thickness))
             elif selected_model == "Hybrid Corrected":
                 D_custom = predict_hybrid_corrected(params, r_custom, np.full_like(r_custom, custom_thickness))
-            elif selected_model == "Coupled Kernel":
-                D_custom = predict_coupled_kernel(params, r_custom, np.full_like(r_custom, custom_thickness))
-            elif selected_model == "Coupled Kernel + sqrt(r)":
-                D_custom = predict_coupled_kernel_sqrt(params, r_custom, np.full_like(r_custom, custom_thickness))
-            elif selected_model == "Kernel + Skyshine Floor":
-                D_custom = predict_kernel_skyshine(params, r_custom, np.full_like(r_custom, custom_thickness))
-            elif selected_model == "Coupled Kernel + Skyshine":
-                D_custom = predict_coupled_sqrt_skyshine(params, r_custom, np.full_like(r_custom, custom_thickness))
+            elif selected_model == "Physical Coupled":
+                D_custom = predict_physical_coupled(params, r_custom, np.full_like(r_custom, custom_thickness))
             else:
                 D_custom = np.zeros_like(r_custom)
 

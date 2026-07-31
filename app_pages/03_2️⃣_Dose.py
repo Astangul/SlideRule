@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from scipy.interpolate import interp1d
+from scipy.optimize import curve_fit
 from utils.plot_func_st import dose_scatter_plot_3, hex_to_rgba, hex_to_complementary_rgba
 
 # ______________________________________________________________________________________________________________________
@@ -26,6 +27,101 @@ def load_data(sheet_name):
     if "Dose" in df.columns and "Dose (Gy)" not in df.columns:
         df = df.rename(columns={"Dose": "Dose (Gy)"})
     return df
+
+# ______________________________________________________________________________________________________________________
+# Physical Coupled + Skyshine model (alternative to the log-linear A/k/b interpolation)
+#
+# D(r,T) = A.r^-p . exp(-(mu_air+mu_T.T).r) . exp(-s1.T-s2.T^2)          [direct]
+#        + B.r^-n . exp(-mu_sky.r) . exp(-mu_s2.T)                       [skyshine]
+#
+# All thickness coefficients (mu_T, s1, s2, mu_s2) are bounded >= 0, which guarantees
+# the predicted dose decreases monotonically with shield thickness at any distance
+# (d(dose)/dT <= 0). Unlike a plain log-linear interpolation of per-thickness fit
+# parameters, this makes the model safe to evaluate at a thickness outside the
+# range that was actually calculated by the transport code.
+PHYSICAL_MODEL_LO = np.array([0, 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0])
+PHYSICAL_MODEL_HI = np.array([np.inf, 3, 0.2, 0.01, 1, 0.05, np.inf, 2.5, 0.05, 1])
+
+def predict_physical_coupled(params, r, T):
+    A, p, mu_air, mu_T, s1, s2, B, n_sky, mu_sky, mu_s2 = params
+    direct = A * r**(-p) * np.exp(-(mu_air + mu_T*T)*r) * np.exp(-s1*T - s2*T**2)
+    sky = B * r**(-n_sky) * np.exp(-mu_sky*r) * np.exp(-mu_s2*T)
+    return direct + sky
+
+@st.cache_data
+def fit_physical_coupled(fissile, case, screen, particle):
+    """
+    Fit the Physical Coupled + Skyshine model on the raw (unscaled, i.e. at the
+    1e17-fission reference) 'final' data for one (Fissile, Case, Screen, Particle)
+    selection, using all available thicknesses (including the bare/None case).
+    Cached per selection since the fit does not depend on the fission count
+    (the fission multiplier is a pure amplitude scaling applied at prediction time).
+
+    Returns (popt, perr, pcov, R2, n_points, thickness_range) or None if unavailable.
+    """
+    raw = load_data('final')
+    subset = raw[
+        (raw["Fissile"] == fissile)
+        & (raw["Case"] == case)
+        & (raw["Screen"].isin(["None", screen]))
+        & (raw["Particle"] == particle)
+    ].dropna(subset=["Dose (Gy)", "Distance (m)", "Thickness (cm)"])
+    subset = subset[subset["Dose (Gy)"] > 0]
+
+    if len(subset) < 15 or subset["Thickness (cm)"].nunique() < 3:
+        return None
+
+    r_data = subset["Distance (m)"].values.astype(float)
+    T_data = subset["Thickness (cm)"].values.astype(float)
+    D_data = subset["Dose (Gy)"].values.astype(float)
+    ln_D = np.log(D_data)
+
+    def log_model(vars, A, p, mu_air, mu_T, s1, s2, B, n_sky, mu_sky, mu_s2):
+        r, T = vars
+        direct = A * r**(-p) * np.exp(-(mu_air + mu_T*T)*r) * np.exp(-s1*T - s2*T**2)
+        sky = B * r**(-n_sky) * np.exp(-mu_sky*r) * np.exp(-mu_s2*T)
+        return np.log(np.maximum(direct + sky, 1e-300))
+
+    initial_guess = [1.0, 2.0, 0.03, 0.0, 0.1, 0.001, 1e-3, 1.2, 0.005, 0.02]
+    try:
+        popt, pcov = curve_fit(log_model, (r_data, T_data), ln_D, p0=initial_guess,
+                              bounds=(PHYSICAL_MODEL_LO, PHYSICAL_MODEL_HI), maxfev=100000)
+        perr = np.sqrt(np.diag(pcov))
+        ln_D_fit = log_model((r_data, T_data), *popt)
+        ss_res = np.sum((ln_D - ln_D_fit)**2)
+        ss_tot = np.sum((ln_D - np.mean(ln_D))**2)
+        R2 = 1 - ss_res/ss_tot if ss_tot > 0 else 0.0
+        thickness_range = (float(T_data.min()), float(T_data.max()))
+        return popt, perr, pcov, R2, len(subset), thickness_range
+    except Exception:
+        return None
+
+def predict_physical_coupled_sigma(popt, pcov, r, T):
+    """
+    Propagate the fit's parameter covariance to a 1-sigma uncertainty on the
+    predicted dose at each (r, T), via the delta method: sigma_D^2 = J . Cov . J^T,
+    where J is the Jacobian of the dose w.r.t. the 10 parameters (estimated by
+    central finite differences). Unlike naively evaluating the model at
+    popt +/- perr (which ignores parameter correlations and is not guaranteed
+    to bracket the central prediction), this band is centered on the central
+    prediction by construction.
+    """
+    r = np.asarray(r, dtype=float)
+    T = np.asarray(T, dtype=float)
+    n_par = len(popt)
+    J = np.zeros((len(r), n_par))
+    for i in range(n_par):
+        step = max(abs(popt[i]), 1e-6) * 1e-4
+        p_hi = np.array(popt, dtype=float)
+        p_lo = np.array(popt, dtype=float)
+        p_hi[i] = min(popt[i] + step, PHYSICAL_MODEL_HI[i])
+        p_lo[i] = max(popt[i] - step, PHYSICAL_MODEL_LO[i])
+        denom = p_hi[i] - p_lo[i]
+        if denom <= 0:
+            continue
+        J[:, i] = (predict_physical_coupled(p_hi, r, T) - predict_physical_coupled(p_lo, r, T)) / denom
+    variance = np.einsum('ij,jk,ik->i', J, pcov, J)
+    return np.sqrt(np.maximum(variance, 0.0))
 
 data = load_data('final')
 
@@ -154,6 +250,45 @@ with tab1:
             (data["Case"].isin(visu_filters["Case"])) &
             (data["Screen"].isin(visu_filters["Screen"]))
         ]
+
+    # 🔹 Permettre à l'utilisateur d'entrer des distances spécifiques pour calculer la dose
+    user_distances_input = st.sidebar.text_input("Enter distances (semicolon-separated, in meters):", "10; 50; 100; 500; 1000")
+    st.sidebar.divider()
+    # 🔸 Convertir les distances entrées en une liste de valeurs numériques
+    try:
+        user_distances = [float(d.strip()) for d in user_distances_input.split(";") if d.strip()]
+        user_distances = [d for d in user_distances if d > 0]  # Filtrer les valeurs négatives
+    except ValueError:
+        st.sidebar.error("Invalid input. Please enter semicolon-separated numeric values.")
+        user_distances = []
+
+    # Range check based on available data
+    min_dist = visu_data["Distance (m)"].min()
+    max_dist = visu_data["Distance (m)"].max()
+    invalid_distances = [d for d in user_distances if d < min_dist or d > max_dist]
+    if invalid_distances:
+        st.warning(
+            f"Distances {invalid_distances} are outside the valid range ({min_dist:.1f} - {max_dist:.1f} m)."
+        )
+
+    dose_method_label = st.sidebar.radio(
+        "Dose calculation method:",
+        options=[
+            "Log-linear interpolation (A, k, b)",
+            "Physical Coupled + Skyshine (model fit)",
+        ],
+        index=0,
+        help=(
+            "**Log-linear interpolation** (default): interpolates pre-fitted A, k, b "
+            "parameters across the available thicknesses. Simple and fast, but not "
+            "guaranteed to behave physically outside the calculated thickness range.\n\n"
+            "**Physical Coupled + Skyshine**: fits a single model on all available "
+            "thicknesses at once. Guaranteed monotonically decreasing with thickness "
+            "at any distance, so it stays physical even when extrapolating to a "
+            "thickness beyond the calculated range."
+        ),
+    )
+    dose_method = "interp" if dose_method_label.startswith("Log-linear") else "physical"
 
     # ______________________________________________________________________________________________________________________
     # st.tabs(["📈 Visualize"])
@@ -349,16 +484,75 @@ with tab1:
             "b_uncertainty": b_uncertainty_new
         }
 
+    def get_dose_predictors(particle, T_new, method):
+        """
+        Returns (predict, predict_upper, predict_lower, ok, info) for the given
+        particle/thickness, where predict* are callables mapping an array of
+        distances (m) to dose (Gy) already scaled by the fission multiplier.
+        Dispatches between the two available methods.
+        """
+        if method == "physical":
+            fit_result = fit_physical_coupled(selected_fissile, selected_case, selected_screen, particle)
+            if fit_result is None:
+                st.warning(f"Not enough data to fit the Physical Coupled model for Particle {particle}. Skipping.")
+                return None, None, None, False, None
+
+            popt, perr, pcov, R2, n_points, (T_min, T_max) = fit_result
+            if T_new < T_min or T_new > T_max:
+                st.caption(
+                    f"ℹ️ T={T_new:.0f} cm is outside the calculated range ({T_min:.0f}-{T_max:.0f} cm) "
+                    f"for Particle {particle}: extrapolating with the physical model "
+                    f"(guaranteed monotonically decreasing with thickness)."
+                )
+
+            def predict(d):
+                d = np.asarray(d, dtype=float)
+                return predict_physical_coupled(popt, d, np.full_like(d, T_new)) * dose_multiplier
+
+            def predict_sigma(d):
+                # 1-sigma uncertainty on the dose, via delta-method propagation of the
+                # full parameter covariance (centered on `predict` by construction).
+                d = np.asarray(d, dtype=float)
+                return predict_physical_coupled_sigma(popt, pcov, d, np.full_like(d, T_new)) * dose_multiplier
+
+            def predict_upper(d):
+                return predict(d) + predict_sigma(d)
+
+            def predict_lower(d):
+                center = predict(d)
+                # Keep strictly positive (needed for the log-scale plot) even when
+                # the 1-sigma uncertainty exceeds the central value.
+                return np.maximum(center - predict_sigma(d), center * 1e-6)
+
+            info = {
+                "popt": popt, "perr": perr, "pcov": pcov, "R2": R2, "n_points": n_points,
+                "T_range": (T_min, T_max), "predict_sigma": predict_sigma,
+            }
+            return predict, predict_upper, predict_lower, True, info
+
+        params = interpolate_parameters(filtered_curve_fit_data, particle, T_new)
+        if not params:
+            return None, None, None, False, None
+        predict = lambda d: calculate_interpolated_dose(d, params["A"], params["k"], params["b"])
+        predict_upper = lambda d: calculate_interpolated_dose(
+            d, params["A"] + params["A_uncertainty"], params["k"] + params["k_uncertainty"], params["b"] + params["b_uncertainty"]
+        )
+        predict_lower = lambda d: calculate_interpolated_dose(
+            d, params["A"] - params["A_uncertainty"], params["k"] - params["k_uncertainty"], params["b"] - params["b_uncertainty"]
+        )
+        return predict, predict_upper, predict_lower, True, params
+
     color_N = "#9400D3"   # Violet profond pour la courbe interpolée des Neutrons (N)
     color_P = "#FF4500"  # Orange foncé pour la courbe interpolée des Photons (P)
-    
-    # 🔹 Ajout des courbes interpolées pour Neutrons (N)
-    params_N = interpolate_parameters(filtered_curve_fit_data, "N", T_new)
-    if params_N:
-        x_values = np.logspace(np.log10(1), np.log10(1200), 100)
-        y_values_N = calculate_interpolated_dose(x_values, params_N["A"], params_N["k"], params_N["b"])
-        y_values_upper_N = calculate_interpolated_dose(x_values, params_N["A"] + params_N["A_uncertainty"], params_N["k"] + params_N["k_uncertainty"], params_N["b"] + params_N["b_uncertainty"])
-        y_values_lower_N = calculate_interpolated_dose(x_values, params_N["A"] - params_N["A_uncertainty"], params_N["k"] - params_N["k_uncertainty"], params_N["b"] - params_N["b_uncertainty"])
+
+    x_values = np.logspace(np.log10(1), np.log10(1200), 100)
+
+    # 🔹 Ajout des courbes pour Neutrons (N)
+    predict_N, predict_upper_N, predict_lower_N, ok_N, info_N = get_dose_predictors("N", T_new, dose_method)
+    if ok_N:
+        y_values_N = predict_N(x_values)
+        y_values_upper_N = predict_upper_N(x_values)
+        y_values_lower_N = predict_lower_N(x_values)
 
         if show_components:
             fig.add_trace(go.Scatter(
@@ -394,12 +588,12 @@ with tab1:
                 showlegend=False
             ))
 
-    # Interpolation pour les Photons (P)
-    params_P = interpolate_parameters(filtered_curve_fit_data, "P", T_new)
-    if params_P:
-        y_values_P = calculate_interpolated_dose(x_values, params_P["A"], params_P["k"], params_P["b"])
-        y_values_upper_P = calculate_interpolated_dose(x_values, params_P["A"] + params_P["A_uncertainty"], params_P["k"] + params_P["k_uncertainty"], params_P["b"] + params_P["b_uncertainty"])
-        y_values_lower_P = calculate_interpolated_dose(x_values, params_P["A"] - params_P["A_uncertainty"], params_P["k"] - params_P["k_uncertainty"], params_P["b"] - params_P["b_uncertainty"])
+    # Courbe pour les Photons (P)
+    predict_P, predict_upper_P, predict_lower_P, ok_P, info_P = get_dose_predictors("P", T_new, dose_method)
+    if ok_P:
+        y_values_P = predict_P(x_values)
+        y_values_upper_P = predict_upper_P(x_values)
+        y_values_lower_P = predict_lower_P(x_values)
 
         if show_components:
             fig.add_trace(go.Scatter(
@@ -434,8 +628,8 @@ with tab1:
                 hoverinfo='skip', # ✅ Désactive l'affichage au survol
                 showlegend=False
             ))
-    # Vérifier si les interpolations N et P existent avant de créer la somme
-    if params_N and params_P:
+    # Vérifier si les courbes N et P existent avant de créer la somme
+    if ok_N and ok_P:
         y_values_total = y_values_N + y_values_P
         y_values_upper_total = y_values_upper_N + y_values_upper_P
         y_values_lower_total = y_values_lower_N + y_values_lower_P
@@ -502,51 +696,30 @@ with tab1:
             f"Distance at threshold: {intersection_distance:.1f} m"
         )
     # ------------------------------------------------------------------
-    # 🔹 Permettre à l'utilisateur d'entrer des distances spécifiques pour calculer la dose
-    st.sidebar.divider()
-    user_distances_input = st.sidebar.text_input("Enter distances (semicolon-separated, in meters):", "10; 50; 100; 500; 1000")    
-    # 🔸 Convertir les distances entrées en une liste de valeurs numériques
-    try:
-        user_distances = [float(d.strip()) for d in user_distances_input.split(";") if d.strip()]
-        user_distances = [d for d in user_distances if d > 0]  # Filtrer les valeurs négatives
-    except ValueError:
-        st.sidebar.error("Invalid input. Please enter semicolon-separated numeric values.")
-        user_distances = []
-    
-    # Range check based on available data
-    min_dist = visu_data["Distance (m)"].min()
-    max_dist = visu_data["Distance (m)"].max()
-    invalid_distances = [d for d in user_distances if d < min_dist or d > max_dist]
-    if invalid_distances:
-        st.warning(
-            f"Distances {invalid_distances} are outside the valid range ({min_dist:.1f} - {max_dist:.1f} m)."
-        )
-
     # 🔸 Calculer les doses aux distances spécifiées
     if user_distances:
-        doses_N = [calculate_interpolated_dose(d, params_N["A"], params_N["k"], params_N["b"]) for d in user_distances] if params_N else []
-        doses_P = [calculate_interpolated_dose(d, params_P["A"], params_P["k"], params_P["b"]) for d in user_distances] if params_P else []
-     
-        # 🔹 Ajouter les marqueurs 🟢 sur les courbes interpolées
-        if show_components and params_N:
+        doses_N = list(predict_N(np.array(user_distances))) if ok_N else []
+        doses_P = list(predict_P(np.array(user_distances))) if ok_P else []
 
-            x_values = np.logspace(np.log10(1), np.log10(1200), 100)
-            y_values_N = calculate_interpolated_dose(x_values, params_N["A"], params_N["k"], params_N["b"])
+        # Incertitude 1-sigma sur la dose (uniquement disponible pour le modèle physique)
+        if dose_method == "physical":
+            doses_N_sigma = list(info_N["predict_sigma"](np.array(user_distances))) if ok_N else []
+            doses_P_sigma = list(info_P["predict_sigma"](np.array(user_distances))) if ok_P else []
 
+        # 🔹 Ajouter les marqueurs 🟢 sur les courbes calculées
+        if show_components and ok_N:
             fig.add_trace(go.Scatter(
                 x=user_distances,
                 y=doses_N,
                 mode='markers',
                 name=f"Interpolated N ({T_new} cm)",
-                marker=dict(symbol='star-square', size=11, color=color_N),    
+                marker=dict(symbol='star-square', size=11, color=color_N),
                 # text=[f"[N] {dose:.3e} Gy" for dose in doses_N],
                 # text=[f"[N] {dose:.3e} Gy" for d, dose in zip(user_distances, doses_N)],
                 legendgroup="Interpolated N"
             ))
-    
-        if show_components and params_P:
-            y_values_P = calculate_interpolated_dose(x_values, params_P["A"], params_P["k"], params_P["b"])
 
+        if show_components and ok_P:
             fig.add_trace(go.Scatter(
                 x=user_distances,
                 y=doses_P,
@@ -557,10 +730,13 @@ with tab1:
                 # text=[f"[P] {dose:.3e} Gy" for d, dose in zip(user_distances, doses_P)],
                 legendgroup="Interpolated P"
             ))
-        
+
         # Calcul de la dose totale à chaque distance
-        if user_distances and params_N and params_P:
+        if user_distances and ok_N and ok_P:
             doses_total = [doses_N[i] + doses_P[i] for i in range(len(user_distances))]
+            if dose_method == "physical":
+                # Combinaison quadratique : fits N et P indépendants
+                doses_total_sigma = list(np.sqrt(np.array(doses_N_sigma)**2 + np.array(doses_P_sigma)**2))
 
             # Ajouter les marqueurs noirs pour la dose totale
             fig.add_trace(go.Scatter(
@@ -591,50 +767,104 @@ with tab2:
 
     if user_distances:
         # Création du DataFrame pour les doses calculées
-        df_doses = pd.DataFrame({
+        df_doses_data = {
             "Distance (m)": user_distances,
-            "Dose Neutrons (Gy)": doses_N if params_N else [None] * len(user_distances),
-            "Dose Photons (Gy)": doses_P if params_P else [None] * len(user_distances),
-            "Total Dose (Gy)": doses_total if (params_N and params_P) else [None] * len(user_distances)
-        })
-
-        # Appliquer un format scientifique aux colonnes de dose
-        formatted_doses = df_doses.style.format({
+            "Dose Neutrons (Gy)": doses_N if ok_N else [None] * len(user_distances),
+            "Dose Photons (Gy)": doses_P if ok_P else [None] * len(user_distances),
+            "Total Dose (Gy)": doses_total if (ok_N and ok_P) else [None] * len(user_distances)
+        }
+        format_dict = {
             "Distance (m)": "{:.1f}",
             "Dose Neutrons (Gy)": "{:.2e}",
             "Dose Photons (Gy)": "{:.2e}",
             "Total Dose (Gy)": "{:.2e}"
-        })
-
-        # Affichage du tableau des doses interpolées
-        st.header("Interpolated Doses")
-        st.dataframe(formatted_doses, hide_index=True)      
-
-    with st.expander("See explanation"):
-        st.subheader("Equation used for interpolated dose calculation")
-        st.latex(r"D = \frac{N_{\text{fissions}}}{10^{17}} \frac{A}{d^k} \cdot e^{-b \cdot d} \cdot ")
-
-        # Vérifier si les paramètres interpolés existent
-        if params_N or params_P:
-            # Création du DataFrame pour les paramètres interpolés
-            df_params = pd.DataFrame({
-                "Parameter": ["A", "k", "b"],
-                "Neutron Value": [
-                    f"{params_N['A']:.3e} ± {params_N['A_uncertainty']:.3e}" if params_N else "N/A",
-                    f"{params_N['k']:.3f} ± {params_N['k_uncertainty']:.3f}" if params_N else "N/A",
-                    f"{params_N['b']:.3e} ± {params_N['b_uncertainty']:.3e}" if params_N else "N/A"
-                ],
-                "Photon Value": [
-                    f"{params_P['A']:.3e} ± {params_P['A_uncertainty']:.3e}" if params_P else "N/A",
-                    f"{params_P['k']:.3f} ± {params_P['k_uncertainty']:.3f}" if params_P else "N/A",
-                    f"{params_P['b']:.3e} ± {params_P['b_uncertainty']:.3e}" if params_P else "N/A"
-                ]
+        }
+        # Incertitude 1-sigma : uniquement disponible pour le modèle physique
+        if dose_method == "physical":
+            df_doses_data["± σ Neutrons (Gy)"] = doses_N_sigma if ok_N else [None] * len(user_distances)
+            df_doses_data["± σ Photons (Gy)"] = doses_P_sigma if ok_P else [None] * len(user_distances)
+            df_doses_data["± σ Total (Gy)"] = doses_total_sigma if (ok_N and ok_P) else [None] * len(user_distances)
+            format_dict.update({
+                "± σ Neutrons (Gy)": "{:.2e}",
+                "± σ Photons (Gy)": "{:.2e}",
+                "± σ Total (Gy)": "{:.2e}",
             })
 
-            # Affichage du tableau des paramètres interpolés
-            st.subheader("Interpolated parameters")
-            st.dataframe(df_params, hide_index=True)
-        
+        df_doses = pd.DataFrame(df_doses_data)
+
+        # Appliquer un format scientifique aux colonnes de dose
+        formatted_doses = df_doses.style.format(format_dict)
+
+        # Affichage du tableau des doses calculées
+        table_title = "Interpolated Doses" if dose_method == "interp" else "Model-Predicted Doses (Physical Coupled)"
+        st.header(table_title)
+        st.dataframe(formatted_doses, hide_index=True)
+
+    with st.expander("See explanation"):
+        if dose_method == "interp":
+            st.subheader("Equation used for interpolated dose calculation")
+            st.latex(r"D = \frac{N_{\text{fissions}}}{10^{17}} \frac{A}{d^k} \cdot e^{-b \cdot d} \cdot ")
+            st.caption(
+                "The A, k, b parameters are fitted separately at each calculated thickness, then "
+                "log-linearly interpolated (or extrapolated) to the requested thickness T."
+            )
+
+            # Vérifier si les paramètres interpolés existent
+            if ok_N or ok_P:
+                # Création du DataFrame pour les paramètres interpolés
+                df_params = pd.DataFrame({
+                    "Parameter": ["A", "k", "b"],
+                    "Neutron Value": [
+                        f"{info_N['A']:.3e} ± {info_N['A_uncertainty']:.3e}" if ok_N else "N/A",
+                        f"{info_N['k']:.3f} ± {info_N['k_uncertainty']:.3f}" if ok_N else "N/A",
+                        f"{info_N['b']:.3e} ± {info_N['b_uncertainty']:.3e}" if ok_N else "N/A"
+                    ],
+                    "Photon Value": [
+                        f"{info_P['A']:.3e} ± {info_P['A_uncertainty']:.3e}" if ok_P else "N/A",
+                        f"{info_P['k']:.3f} ± {info_P['k_uncertainty']:.3f}" if ok_P else "N/A",
+                        f"{info_P['b']:.3e} ± {info_P['b_uncertainty']:.3e}" if ok_P else "N/A"
+                    ]
+                })
+
+                # Affichage du tableau des paramètres interpolés
+                st.subheader("Interpolated parameters")
+                st.dataframe(df_params, hide_index=True)
+        else:
+            st.subheader("Equation used for the Physical Coupled + Skyshine model")
+            st.latex(
+                r"D(r,T) = \frac{N_{\text{fissions}}}{10^{17}} \left["
+                r"A\,r^{-p}\,e^{-(\mu_{air}+\mu_T T)\,r}\,e^{-s_1 T - s_2 T^2}"
+                r" + B\,r^{-n}\,e^{-\mu_{sky} r}\,e^{-\mu_{s2} T}\right]"
+            )
+            st.caption(
+                "Fitted once on all available thicknesses at once (direct + skyshine components). "
+                "The thickness coefficients (μ_T, s₁, s₂, μ_s2) are constrained ≥ 0, which guarantees "
+                "the dose decreases monotonically with thickness at any distance — safe to evaluate "
+                "even for a thickness T beyond the calculated range."
+            )
+
+            if ok_N or ok_P:
+                param_names = ["A", "p", "μ_air", "μ_T", "s₁", "s₂", "B", "n_sky", "μ_sky", "μ_s2"]
+                df_params = pd.DataFrame({
+                    "Parameter": param_names,
+                    "Neutron Value": [f"{v:.3e}" for v in info_N["popt"]] if ok_N else ["N/A"] * 10,
+                    "Photon Value": [f"{v:.3e}" for v in info_P["popt"]] if ok_P else ["N/A"] * 10,
+                })
+                st.subheader("Fitted parameters")
+                st.dataframe(df_params, hide_index=True)
+
+                col_r2_n, col_r2_p = st.columns(2)
+                with col_r2_n:
+                    if ok_N:
+                        st.metric("Neutron fit: log R²", f"{info_N['R2']:.5f}",
+                                 help=f"Fitted on {info_N['n_points']} points, T in "
+                                      f"[{info_N['T_range'][0]:.0f}, {info_N['T_range'][1]:.0f}] cm")
+                with col_r2_p:
+                    if ok_P:
+                        st.metric("Photon fit: log R²", f"{info_P['R2']:.5f}",
+                                 help=f"Fitted on {info_P['n_points']} points, T in "
+                                      f"[{info_P['T_range'][0]:.0f}, {info_P['T_range'][1]:.0f}] cm")
+
     st.divider()
 
     st.header("Calulated Doses")
