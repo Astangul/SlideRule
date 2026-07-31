@@ -4,6 +4,10 @@ __pycache__/
 *.pyc
 *.py[cod]
 
+# Jupyter checkpoints and JupyterLite build cache
+.ipynb_checkpoints/
+.jupyterlite.doit.db
+
 # Streamlit secrets (ne pas versionner!)
 .streamlit/secrets.toml
 
@@ -13,5 +17,7 @@ __pycache__/
 # Generated notebook outputs (PySR runs, etc.)
 Notebooks/outputs/
 
-# Local Windows shortcuts
+# Local Windows shortcuts and browser bookmarks
 Ressources/*.lnk
+Datasets/OpenMC/*.lnk
+Datasets/OpenMC/*.url
